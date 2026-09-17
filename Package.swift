@@ -8,7 +8,8 @@ let package = Package(
     ],
     products: [
         .library(name: "AIQuotaCore", targets: ["AIQuotaCore"]),
-        .executable(name: "aiquota-cli", targets: ["aiquota-cli"])
+        .executable(name: "aiquota-cli", targets: ["aiquota-cli"]),
+        .executable(name: "AIQuota", targets: ["AIQuota"])
     ],
     targets: [
         .target(
@@ -20,6 +21,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "aiquota-cli",
+            dependencies: ["AIQuotaCore"]
+        ),
+        .executableTarget(
+            name: "AIQuota",
             dependencies: ["AIQuotaCore"]
         ),
         .testTarget(
