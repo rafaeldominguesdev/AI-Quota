@@ -37,53 +37,24 @@ public struct FiveHourBlock: Equatable, Sendable {
 }
 
 public enum FiveHourBlockBuilder {
-    public static let blockDuration: TimeInterval = 5 * 3600
-
-    private static let utcCalendar: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        return calendar
-    }()
+    public static let blockDuration: TimeInterval = UsageWindowBuilder.windowDuration
 
     /// Agrupa eventos (não precisam estar ordenados) em blocos de 5 horas.
     ///
-    /// Regra:
+    /// Regra (implementada em `UsageWindowBuilder`, reaproveitada por todos os provedores):
     /// - Os eventos são ordenados por timestamp.
     /// - O primeiro evento de um bloco abre o bloco com início arredondado para baixo
     ///   na hora cheia (UTC).
     /// - Um evento entra no bloco atual se estiver a menos de 5h do início do bloco
     ///   E a menos de 5h do evento anterior. Caso contrário, abre um novo bloco.
     public static func buildBlocks(from events: [UsageEvent]) -> [FiveHourBlock] {
-        guard !events.isEmpty else { return [] }
-        let sorted = events.sorted { $0.timestamp < $1.timestamp }
-
-        var blocks: [FiveHourBlock] = []
-        var currentStart = floorToHour(sorted[0].timestamp)
-        var currentEvents: [UsageEvent] = [sorted[0]]
-        var lastTimestamp = sorted[0].timestamp
-
-        for event in sorted.dropFirst() {
-            let sinceStart = event.timestamp.timeIntervalSince(currentStart)
-            let sinceLast = event.timestamp.timeIntervalSince(lastTimestamp)
-
-            if sinceStart < blockDuration && sinceLast < blockDuration {
-                currentEvents.append(event)
-                lastTimestamp = event.timestamp
-            } else {
-                blocks.append(FiveHourBlock(start: currentStart, events: currentEvents))
-                currentStart = floorToHour(event.timestamp)
-                currentEvents = [event]
-                lastTimestamp = event.timestamp
-            }
+        UsageWindowBuilder.windows(for: events).map { window, events in
+            FiveHourBlock(start: window.start, events: events)
         }
-
-        blocks.append(FiveHourBlock(start: currentStart, events: currentEvents))
-        return blocks
     }
 
     /// Arredonda um timestamp para baixo na hora cheia, em UTC.
     static func floorToHour(_ date: Date) -> Date {
-        let components = utcCalendar.dateComponents([.year, .month, .day, .hour], from: date)
-        return utcCalendar.date(from: components) ?? date
+        UsageWindowBuilder.floorToHour(date)
     }
 }
