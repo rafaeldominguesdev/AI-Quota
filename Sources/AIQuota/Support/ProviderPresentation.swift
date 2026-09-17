@@ -8,14 +8,6 @@ enum UsageLevel {
     case attention
     case critical
 
-    var label: String {
-        switch self {
-        case .calm: return "Tranquilo"
-        case .attention: return "Atenção"
-        case .critical: return "Crítico"
-        }
-    }
-
     var color: Color {
         switch self {
         case .calm: return Theme.success
@@ -83,18 +75,9 @@ struct ProviderPresentation {
         return snapshot.isActive ? Theme.tok : Theme.inkMuted
     }
 
-    var kindBadge: String {
-        switch snapshot.kind {
-        case .fullTokens: return "Tokens"
-        case .tokensOnly: return "Parcial"
-        case .countOnly: return "Contagem"
-        case .unavailable: return "Indisponível"
-        }
-    }
-
-    /// Valor mais importante daquele provedor, já formatado — ou `nil` quando não há nada
-    /// confiável para mostrar.
-    var primaryValue: String? {
+    /// O que mostrar no lugar da barra quando não há percentual: o dado que o provedor tem, ou
+    /// `nil` quando ele não tem nenhum (aí a linha só mostra o traço).
+    var fallbackValue: String? {
         switch snapshot.kind {
         case .fullTokens, .tokensOnly:
             guard snapshot.totalTokens > 0 else { return nil }
@@ -107,11 +90,6 @@ struct ProviderPresentation {
         }
     }
 
-    var cost: Double? {
-        guard let cost = snapshot.totalCost, cost > 0 else { return nil }
-        return cost
-    }
-
     /// Momento em que a janela reinicia: o do limite oficial quando existir, senão o fim da
     /// janela local. `nil` quando a janela já encerrou (não faz sentido contar para trás).
     var resetsAt: Date? {
@@ -119,12 +97,6 @@ struct ProviderPresentation {
         guard snapshot.isActive else { return nil }
         return snapshot.windowEnd
     }
-
-    var hourlyUsage: [Int] {
-        snapshot.hourlyUsage.contains(where: { $0 > 0 }) ? snapshot.hourlyUsage : []
-    }
-
-    var isExpandable: Bool { !snapshot.byModel.isEmpty }
 
     /// Explicação curta para casos de borda (não instalado, sem dado legível, erro de leitura).
     var note: String? {

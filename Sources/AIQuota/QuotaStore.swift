@@ -91,20 +91,40 @@ final class QuotaStore: ObservableObject {
         return ProviderPresentation(snapshot: snapshot, isPrimary: true)
     }
 
-    /// Provedores na ordem em que devem aparecer: o principal primeiro, depois os que têm dado,
-    /// e por último os indisponíveis (que ficam apagados no fim da lista).
+    /// Provedores na ordem em que devem aparecer: o principal primeiro, depois quem tem
+    /// percentual, depois quem tem algum outro dado, e por último as linhas vazias.
     var providerRows: [ProviderPresentation] {
         guard let overview else { return [] }
         return overview.providers
             .map { ProviderPresentation(snapshot: $0, isPrimary: $0.providerId == overview.primaryProviderId) }
             .sorted { lhs, rhs in
                 if lhs.isPrimary != rhs.isPrimary { return lhs.isPrimary }
-                let lhsDead = lhs.snapshot.kind == .unavailable
-                let rhsDead = rhs.snapshot.kind == .unavailable
-                if lhsDead != rhsDead { return rhsDead }
+                let lhsRank = Self.rank(lhs)
+                let rhsRank = Self.rank(rhs)
+                if lhsRank != rhsRank { return lhsRank < rhsRank }
                 return lhs.displayName < rhs.displayName
             }
     }
 
+    private static func rank(_ presentation: ProviderPresentation) -> Int {
+        if presentation.percent != nil { return 0 }
+        if presentation.fallbackValue != nil { return 1 }
+        return 2
+    }
+
     var configWarnings: [String] { overview?.configWarnings ?? [] }
+
+    /// A única linha de resumo do painel: custo e tokens somados de todas as IAs que reportam
+    /// esses dados. `nil` quando nenhuma reporta, para a linha simplesmente não existir.
+    var summaryLine: String? {
+        guard let overview else { return nil }
+
+        let cost = overview.providers.compactMap(\.totalCost).reduce(0, +)
+        let tokens = overview.providers.reduce(0) { $0 + $1.totalTokens }
+
+        var parts: [String] = []
+        if cost > 0 { parts.append(QuotaFormatting.cost(cost)) }
+        if tokens > 0 { parts.append(QuotaFormatting.compactTokens(tokens) + " tokens") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 }

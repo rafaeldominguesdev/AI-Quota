@@ -1,251 +1,85 @@
 import SwiftUI
 import AIQuotaCore
 
-/// Uma linha da lista de provedores: indicador de status, nome, badge de qualidade do dado e o
-/// valor principal. Ganha barra fina quando há percentual, destaque azul quando o provedor
-/// reporta limite OFICIAL, e expande para o detalhamento por modelo ao ser clicada.
+/// Uma linha do painel, e o painel é só uma pilha delas:
+///
+///     [logo]  NOME-DA-IA        [barrinha]  42%
+///
+/// Provedor sem percentual troca a barra pelo dado que existir em texto apagado e o número por
+/// um traço.
 struct ProviderRowView: View {
     let presentation: ProviderPresentation
-    let isExpanded: Bool
-    let onToggle: () -> Void
 
-    @ViewState private var isHovering = false
-
-    private var isDead: Bool { presentation.snapshot.kind == .unavailable }
-    private var nameColor: Color {
-        if isDead { return Theme.inkFaint }
-        return presentation.isPrimary ? Theme.ink : Theme.inkDim
-    }
+    private var isDim: Bool { presentation.percent == nil }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Button(action: onToggle) {
-                headline
-            }
-            .buttonStyle(.plain)
-            .disabled(!presentation.isExpandable)
-
-            if let official = presentation.snapshot.officialLimit {
-                officialLimitBlock(official)
-            }
-
-            if let percent = presentation.percent, !presentation.isPercentOfficial {
-                MicroBar(fraction: percent / 100, color: presentation.accent)
-                    .animation(Theme.Motion.gauge, value: percent)
-            }
-
-            if isDead, let note = presentation.note {
-                Text(note)
-                    .font(Theme.mono(Theme.Size.micro))
-                    .foregroundStyle(Theme.inkFaint)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if isExpanded {
-                detail
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .top)),
-                        removal: .opacity
-                    ))
-            }
-        }
-        .padding(9)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.card)
-                .fill(isExpanded || isHovering ? Theme.surface : Theme.bgSoft)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.card)
-                .strokeBorder(
-                    isExpanded || isHovering ? Theme.hairlineStrong : Theme.hairline,
-                    lineWidth: Theme.Metric.hairline
-                )
-        )
-        .overlay(alignment: .leading) {
-            // Marca do provedor principal: a barra vermelha na borda, em vez de um badge de
-            // texto que roubaria a largura do valor.
-            if presentation.isPrimary {
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(Theme.primary)
-                    .frame(width: 2)
-                    .padding(.vertical, 6)
-            }
-        }
-        .onHover { hovering in
-            withAnimation(Theme.Motion.fast) { isHovering = hovering }
-        }
-    }
-
-    // MARK: - Cabeçalho da linha
-
-    private var headline: some View {
-        HStack(spacing: 7) {
-            StatusSquare(color: presentation.accent)
+        HStack(spacing: 8) {
+            ProviderGlyphView(
+                glyph: ProviderGlyph.forProvider(id: presentation.id),
+                color: isDim ? Theme.inkDim : presentation.accent,
+                side: Theme.Metric.glyphSide
+            )
 
             Text(presentation.displayName)
-                .font(Theme.mono(Theme.Size.body, presentation.isPrimary ? .bold : .regular))
-                .foregroundStyle(nameColor)
+                .font(Theme.mono(Theme.Size.small, .medium))
+                .tracking(Theme.tracking(Theme.Em.subtle, at: Theme.Size.small))
+                .textCase(.uppercase)
+                .foregroundStyle(isDim ? Theme.inkFaint : Theme.ink)
                 .lineLimit(1)
-
-            Badge(text: presentation.kindBadge, color: isDead ? Theme.inkFaint : Theme.inkMuted)
+                .truncationMode(.tail)
 
             Spacer(minLength: 6)
 
-            if let value = presentation.primaryValue {
-                Text(value)
-                    .font(Theme.mono(Theme.Size.body, .medium))
-                    .foregroundStyle(isDead ? Theme.inkFaint : Theme.tok)
-            }
+            if let percent = presentation.percent {
+                UsageBar(fraction: percent / 100, color: presentation.accent)
+                    .animation(Theme.Motion.bar, value: percent)
 
-            if presentation.isExpandable {
-                Text("▸")
+                Text(QuotaFormatting.percent(percent))
+                    .font(Theme.mono(Theme.Size.small, .medium))
+                    .foregroundStyle(presentation.accent)
+                    .frame(width: Theme.Metric.percentColumnWidth, alignment: .trailing)
+            } else {
+                Text(presentation.fallbackValue ?? "")
                     .font(Theme.mono(Theme.Size.micro))
                     .foregroundStyle(Theme.inkFaint)
-                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    .animation(Theme.Motion.fast, value: isExpanded)
-            }
-        }
-        .contentShape(Rectangle())
-    }
-
-    // MARK: - Limite oficial
-
-    /// O dado mais valioso do app: não é estimativa nossa, é o próprio provedor dizendo quanto
-    /// da cota foi usada. Ganha bloco próprio, borda azul e o percentual em destaque.
-    private func officialLimitBlock(_ official: OfficialLimitInfo) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Badge(text: "Limite oficial", color: Theme.secondary, emphasized: true)
-
-                CountingNumberText(value: official.usedPercent) { QuotaFormatting.percent($0) }
-                    .font(Theme.mono(Theme.Size.value, .bold))
-                    .foregroundStyle(Theme.secondary)
-                    .animation(Theme.Motion.count, value: official.usedPercent)
-
-                Spacer(minLength: 4)
-
-                if let resetsAt = official.resetsAt {
-                    Text("Reseta \(QuotaFormatting.time(resetsAt))")
-                        .font(Theme.mono(Theme.Size.micro, .medium))
-                        .tracking(Theme.tracking(Theme.Em.subtle, at: Theme.Size.micro))
-                        .textCase(.uppercase)
-                        .foregroundStyle(Theme.secondaryDim)
-                }
-            }
-
-            MicroBar(fraction: official.usedPercent / 100, color: Theme.secondary, height: 4)
-                .animation(Theme.Motion.gauge, value: official.usedPercent)
-
-            Text(official.label)
-                .font(Theme.mono(Theme.Size.micro))
-                .foregroundStyle(Theme.inkMuted)
-                .lineLimit(1)
-        }
-        .padding(7)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.small)
-                .fill(Theme.secondary.opacity(0.06))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.small)
-                .strokeBorder(Theme.secondary.opacity(0.35), lineWidth: Theme.Metric.hairline)
-        )
-    }
-
-    // MARK: - Detalhamento por modelo
-
-    private var detail: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Hairline()
-
-            HStack(spacing: 8) {
-                Text("Por modelo")
-                    .font(Theme.mono(Theme.Size.micro, .bold))
-                    .tracking(Theme.tracking(Theme.Em.label, at: Theme.Size.micro))
-                    .textCase(.uppercase)
-                    .foregroundStyle(Theme.inkMuted)
-
-                Spacer(minLength: 0)
-
-                if let start = presentation.snapshot.windowStart, let end = presentation.snapshot.windowEnd {
-                    Text("\(QuotaFormatting.time(start)) → \(QuotaFormatting.time(end))")
-                        .font(Theme.mono(Theme.Size.micro))
-                        .foregroundStyle(Theme.inkFaint)
-                }
-            }
-
-            ForEach(presentation.snapshot.byModel, id: \.model) { entry in
-                modelRow(entry)
-            }
-
-            if presentation.snapshot.kind != .unavailable {
-                HStack(spacing: 6) {
-                    Text("\(presentation.snapshot.eventCount) evento" + (presentation.snapshot.eventCount == 1 ? "" : "s"))
-                        .font(Theme.mono(Theme.Size.micro))
-                        .foregroundStyle(Theme.inkFaint)
-
-                    if !presentation.snapshot.isActive {
-                        Text("· janela encerrada")
-                            .font(Theme.mono(Theme.Size.micro))
-                            .foregroundStyle(Theme.inkFaint)
-                    }
-                }
-            }
-
-            if !isDead, let note = presentation.note {
-                Text(note)
-                    .font(Theme.mono(Theme.Size.micro))
-                    .foregroundStyle(Theme.inkFaint)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private func modelRow(_ entry: ProviderModelUsage) -> some View {
-        let share = shareFraction(for: entry)
-
-        return VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Text(entry.model)
-                    .font(Theme.mono(Theme.Size.small))
-                    .foregroundStyle(Theme.inkDim)
                     .lineLimit(1)
-                    .truncationMode(.middle)
+                    .frame(width: Theme.Metric.usageBarWidth, alignment: .trailing)
 
-                Spacer(minLength: 6)
-
-                if presentation.snapshot.kind == .countOnly {
-                    Text("\(entry.eventCount)×")
-                        .font(Theme.mono(Theme.Size.small, .medium))
-                        .foregroundStyle(Theme.tok)
-                } else {
-                    Text(QuotaFormatting.compactTokens(entry.totalTokens))
-                        .font(Theme.mono(Theme.Size.small, .medium))
-                        .foregroundStyle(Theme.tok)
-                }
-
-                if let cost = entry.cost, cost > 0 {
-                    Text(QuotaFormatting.cost(cost))
-                        .font(Theme.mono(Theme.Size.small, .medium))
-                        .foregroundStyle(entry.isEstimatedPricing ? Theme.inkMuted : Theme.role)
-                        .frame(width: 66, alignment: .trailing)
-                }
+                Text("—")
+                    .font(Theme.mono(Theme.Size.small))
+                    .foregroundStyle(Theme.inkFaint)
+                    .frame(width: Theme.Metric.percentColumnWidth, alignment: .trailing)
             }
 
-            if share > 0 {
-                MicroBar(fraction: share, color: Theme.tok.opacity(0.7), height: 2)
+            // Marca mínima de que o percentual é oficial, e não estimativa nossa. A coluna é
+            // reservada mesmo quando vazia, senão as linhas desalinham.
+            ZStack {
+                if presentation.isPercentOfficial {
+                    Circle()
+                        .fill(Theme.secondary)
+                        .frame(width: Theme.Metric.officialDotSide, height: Theme.Metric.officialDotSide)
+                }
             }
+            .frame(width: Theme.Metric.officialDotColumnWidth)
         }
+        .frame(height: Theme.Metric.rowHeight)
+        .help(tooltip)
     }
 
-    /// Participação do modelo no total do provedor — em tokens, ou em eventos quando o provedor
-    /// não reporta token nenhum.
-    private func shareFraction(for entry: ProviderModelUsage) -> Double {
-        if presentation.snapshot.kind == .countOnly {
-            let total = presentation.snapshot.eventCount
-            return total > 0 ? Double(entry.eventCount) / Double(total) : 0
+    /// Quem quiser saber o que a linha esconde passa o mouse — é o único lugar onde a explicação
+    /// aparece, para o painel não virar texto.
+    private var tooltip: String {
+        if let official = presentation.snapshot.officialLimit {
+            var text = "Limite oficial do provedor"
+            if let resetsAt = official.resetsAt {
+                text += " — reseta às \(QuotaFormatting.time(resetsAt))"
+            }
+            return text
         }
-        let total = presentation.snapshot.totalTokens
-        return total > 0 ? Double(entry.totalTokens) / Double(total) : 0
+        if let note = presentation.note { return note }
+        if let resetsAt = presentation.resetsAt {
+            return "Uso estimado na janela de 5h — reseta às \(QuotaFormatting.time(resetsAt))"
+        }
+        return presentation.displayName
     }
 }

@@ -78,33 +78,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Barra de menu
 
-    /// Redesenha o medidor e o percentual do NSStatusItem a partir do overview mais recente.
-    /// O percentual mostrado é o do provedor principal, preferindo o limite OFICIAL quando o
-    /// provedor reporta um (dado medido) em vez da nossa estimativa por custo.
+    /// Redesenha o indicador do NSStatusItem: a logo da IA principal e a barrinha carregada.
+    /// O percentual usado é o do limite OFICIAL quando o provedor reporta um (dado medido), e só
+    /// então a nossa estimativa por custo.
     private func updateStatusItem(with overview: QuotaOverview?) {
         guard let button = statusItem?.button else { return }
 
         let presentation = overview?.primary.map {
             ProviderPresentation(snapshot: $0, isPrimary: true)
         }
+        let glyph = ProviderGlyph.forProvider(id: presentation?.id ?? "")
+        let percent = presentation?.percent
+        let color = presentation?.level?.nsColor ?? Theme.NS.inkFaint
 
-        guard let presentation, let percent = presentation.percent, let level = presentation.level else {
-            button.image = MenuBarGauge.image(fraction: nil, color: Theme.NS.inkFaint)
-            button.attributedTitle = NSAttributedString(
-                string: " —",
-                attributes: [
-                    .foregroundColor: Theme.NS.inkFaint,
-                    .font: Theme.nsMono(11, .medium)
-                ]
-            )
+        button.image = MenuBarIndicator.image(
+            glyph: glyph,
+            fraction: percent.map { $0 / 100 },
+            color: color
+        )
+
+        guard MenuBarIndicator.showsPercentTextInMenuBar, let percent else {
+            button.attributedTitle = NSAttributedString(string: "")
             return
         }
 
-        button.image = MenuBarGauge.image(fraction: percent / 100, color: level.nsColor)
         button.attributedTitle = NSAttributedString(
             string: " \(Int(percent.rounded()))%",
             attributes: [
-                .foregroundColor: level.nsColor,
+                .foregroundColor: color,
                 .font: Theme.nsMono(11, .medium),
                 .kern: 0.4
             ]

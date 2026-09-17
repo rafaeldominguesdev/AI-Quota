@@ -59,8 +59,17 @@ enum QuotaFormatting {
         return String(value)
     }
 
+    private static let currencyFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.locale = Locale(identifier: "pt_BR")
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+
     static func cost(_ value: Double) -> String {
-        "US$ " + String(format: "%.2f", value)
+        "US$ " + (currencyFormatter.string(from: NSNumber(value: value)) ?? String(format: "%.2f", value))
     }
 
     static func percent(_ value: Double) -> String {

@@ -88,14 +88,13 @@ enum Theme {
     // MARK: - Escala de texto
 
     enum Size {
-        /// Rótulo de seção em MAIÚSCULAS.
+        /// Rótulo em MAIÚSCULAS (cabeçalho).
         static let label: CGFloat = 10
+        /// Texto de apoio: caminhos, resumo, ações do rodapé.
         static let micro: CGFloat = 9
+        /// Nome da IA e percentual — o texto principal do painel.
         static let small: CGFloat = 11
         static let body: CGFloat = 12
-        static let value: CGFloat = 14
-        static let countdown: CGFloat = 20
-        static let gauge: CGFloat = 30
     }
 
     /// `letter-spacing` em `em`, convertido para pontos por `tracking(_:at:)`.
@@ -116,17 +115,26 @@ enum Theme {
         static let card: CGFloat = 6
         /// Elementos flutuantes (o popover).
         static let pop: CGFloat = 8
-        /// Badges e indicadores quadrados.
+        /// Indicadores pequenos.
         static let small: CGFloat = 3
     }
 
     enum Metric {
         static let hairline: CGFloat = 1
-        static let panelWidth: CGFloat = 380
-        /// Altura máxima do corpo rolável antes de o painel parar de crescer.
-        static let bodyMaxHeight: CGFloat = 520
-        static let padding: CGFloat = 14
-        static let heroGauge: CGFloat = 110
+        static let panelWidth: CGFloat = 280
+        static let padding: CGFloat = 12
+        /// Altura de cada linha de provedor.
+        static let rowHeight: CGFloat = 28
+        /// Lado do glifo da IA no painel.
+        static let glyphSide: CGFloat = 14
+        static let usageBarWidth: CGFloat = 72
+        static let usageBarHeight: CGFloat = 4
+        /// Largura fixa da coluna do percentual, para os números não dançarem entre linhas.
+        static let percentColumnWidth: CGFloat = 34
+        /// Coluna reservada para o pontinho de limite oficial — reservada sempre, mesmo vazia,
+        /// para as linhas continuarem alinhadas.
+        static let officialDotColumnWidth: CGFloat = 7
+        static let officialDotSide: CGFloat = 3
     }
 
     // MARK: - Movimento (§4)
@@ -136,16 +144,10 @@ enum Theme {
         static let fast = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.14)
         /// 180ms — transição padrão de cor/borda.
         static let standard = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.18)
-        /// Expansão de linha de provedor.
-        static let expand = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.3)
         /// Troca de tela (painel ⇄ provedores).
-        static let screen = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.3)
-        /// Anel do medidor se movendo até o novo valor.
-        static let gauge = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.7)
-        /// Números "contando" até o valor.
-        static let count = Animation.easeOut(duration: 0.7)
-        /// Ponto de "ao vivo" pulsando.
-        static let pulse = Animation.easeInOut(duration: 1.1).repeatForever(autoreverses: true)
+        static let screen = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.24)
+        /// Barra de uso indo até o novo valor.
+        static let bar = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.3)
     }
 }
 
