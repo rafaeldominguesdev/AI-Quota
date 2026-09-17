@@ -69,6 +69,14 @@ public struct CustomLogProvider: QuotaProvider {
         let totalTokensSum = byModel.reduce(0) { $0 + $1.totalTokens }
         let totalCostSum: Double? = config.pricing == nil ? nil : byModel.reduce(0) { $0 + ($1.cost ?? 0) }
 
+        let hourlyUsage = UsageWindowBuilder.hourlyBuckets(for: windowEvents, window: last.window) { event in
+            switch resolvedKind {
+            case .fullTokens: return (event.inputTokens ?? 0) + (event.outputTokens ?? 0)
+            case .tokensOnly: return event.totalTokens ?? 0
+            case .countOnly, .unavailable: return 1
+            }
+        }
+
         return ProviderSnapshot(
             providerId: id,
             displayName: displayName,
@@ -82,7 +90,8 @@ public struct CustomLogProvider: QuotaProvider {
             eventCount: windowEvents.count,
             byModel: byModel,
             officialLimit: nil,
-            note: resolvedKind == .countOnly ? "Sem dado de token configurado em providers.json — só contando eventos." : nil
+            note: resolvedKind == .countOnly ? "Sem dado de token configurado em providers.json — só contando eventos." : nil,
+            hourlyUsage: hourlyUsage
         )
     }
 

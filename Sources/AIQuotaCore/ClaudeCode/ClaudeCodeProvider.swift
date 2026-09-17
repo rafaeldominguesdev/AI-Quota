@@ -46,6 +46,12 @@ public struct ClaudeCodeProvider: QuotaProvider {
             )
         }.sorted { ($0.cost ?? 0) > ($1.cost ?? 0) }
 
+        let hourlyUsage = UsageWindowBuilder.hourlyBuckets(
+            for: block.events,
+            window: UsageWindow(start: block.start),
+            value: \.totalTokens
+        )
+
         return ProviderSnapshot(
             providerId: id,
             displayName: displayName,
@@ -59,7 +65,8 @@ public struct ClaudeCodeProvider: QuotaProvider {
             eventCount: block.events.count,
             byModel: byModel,
             officialLimit: nil,
-            note: nil
+            note: nil,
+            hourlyUsage: hourlyUsage
         )
     }
 }

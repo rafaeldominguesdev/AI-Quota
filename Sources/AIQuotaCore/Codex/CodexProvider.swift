@@ -69,6 +69,11 @@ public struct CodexProvider: QuotaProvider {
         let totalTokens = windowEvents.reduce(0) { $0 + $1.totalTokens }
         let modelName = latestModel?.model ?? "desconhecido"
         let officialLimit = latestRateLimits.flatMap { Self.officialLimit(from: $0.limits) }
+        let hourlyUsage = UsageWindowBuilder.hourlyBuckets(
+            for: windowEvents,
+            window: last.window,
+            value: \.totalTokens
+        )
 
         return ProviderSnapshot(
             providerId: id,
@@ -95,7 +100,8 @@ public struct CodexProvider: QuotaProvider {
             officialLimit: officialLimit,
             note: officialLimit == nil
                 ? "Nenhum rate limit oficial encontrado nas sessões locais; mostrando apenas tokens somados."
-                : nil
+                : nil,
+            hourlyUsage: hourlyUsage
         )
     }
 

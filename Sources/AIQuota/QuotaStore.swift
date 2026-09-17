@@ -2,36 +2,49 @@ import Foundation
 import Combine
 import AIQuotaCore
 
+/// Onde cada provedor é lido em disco. Mostrado na tela de PROVEDORES, para o usuário saber
+/// de onde o número dele saiu (e onde mexer quando não sair nada).
+struct ProviderSource: Identifiable, Equatable, Sendable {
+    let id: String
+    let displayName: String
+    let sourcePath: String
+    let kind: ProviderDataKind
+    let isInstalled: Bool
+}
+
 /// Estado observável consumido pelo painel SwiftUI e pelo NSStatusItem.
 ///
-/// `@unchecked Sendable`: mutações só acontecem na main queue (dentro do `DispatchQueue.main.async`
-/// em `refreshNow()`), e a leitura pelas views SwiftUI/AppKit também é sempre na main thread — o
-/// trabalho pesado de I/O roda numa fila de fundo, mas nunca toca as propriedades `@Published`
-/// diretamente.
-final class QuotaStore: ObservableObject, @unchecked Sendable {
-    @Published private(set) var snapshot: QuotaSnapshot?
-    @Published private(set) var cursorUsageByModel: [String: Int] = [:]
+/// Isolado na main actor: todas as propriedades `@Published` são lidas por views SwiftUI e pelo
+/// NSStatusItem, que vivem na main thread. A varredura dos logs (centenas de arquivos .jsonl,
+/// mais um banco SQLite) roda numa `Task.detached` e só volta para cá no `apply(...)`, que é
+/// `@MainActor` — a interface nunca trava esperando I/O.
+@MainActor
+final class QuotaStore: ObservableObject {
+    @Published private(set) var overview: QuotaOverview?
+    @Published private(set) var sources: [ProviderSource] = []
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var isRefreshing = false
 
-    /// Chamado na main thread sempre que um novo snapshot é publicado, para o NSStatusItem
-    /// atualizar o título sem precisar observar o Combine publisher diretamente.
-    var onSnapshotUpdated: ((QuotaSnapshot?) -> Void)?
+    /// Chamado na main thread a cada novo overview, para o NSStatusItem redesenhar o medidor
+    /// sem precisar assinar o publisher do Combine.
+    var onOverviewUpdated: ((QuotaOverview?) -> Void)?
 
-    private let claudeReader = ClaudeCodeLogReader()
-    private let cursorReader = CursorUsageReader()
-    private let codexReader = CodexUsageReader()
-    private let backgroundQueue = DispatchQueue(label: "dev.rafaeldomingues.aiquota.refresh", qos: .userInitiated)
     private var timer: Timer?
+
+    // MARK: - Ciclo de atualização
 
     func startAutoRefresh(interval: TimeInterval = 30) {
         refreshNow()
         stopAutoRefresh()
         let newTimer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            self?.refreshNow()
+            // O timer foi adicionado ao RunLoop.main, então este bloco sempre roda na main
+            // thread — `assumeIsolated` afirma exatamente isso, sem abrir mão da checagem.
+            MainActor.assumeIsolated {
+                self?.refreshNow()
+            }
         }
-        // .common garante que o timer continue disparando mesmo com o popover aberto
-        // (o run loop entra em outros modos durante tracking de UI).
+        // .common garante que o timer continue disparando com o popover aberto (o run loop
+        // entra em outros modos durante tracking de UI).
         RunLoop.main.add(newTimer, forMode: .common)
         timer = newTimer
     }
@@ -41,32 +54,57 @@ final class QuotaStore: ObservableObject, @unchecked Sendable {
         timer = nil
     }
 
-    /// Varre os logs em background e publica o resultado na main thread. A varredura
-    /// percorre potencialmente centenas de arquivos .jsonl e não pode rodar na main thread.
     func refreshNow() {
+        guard !isRefreshing else { return }
         isRefreshing = true
 
-        let claudeReader = self.claudeReader
-        let cursorReader = self.cursorReader
-        let codexReader = self.codexReader
-
-        backgroundQueue.async { [weak self] in
-            let events = claudeReader.readAllEvents()
-            let newSnapshot = QuotaSnapshotBuilder.build(from: events)
-            let windowStart = newSnapshot?.windowStart ?? Date().addingTimeInterval(-5 * 3600)
-            let cursorCounts = cursorReader.usageCountByModel(from: windowStart)
-            // Checado por completude; o núcleo ainda não expõe dados de uso reais do Codex
-            // (formato não documentado — ver docs/DATA-SOURCES.md), então não há nada para exibir.
-            _ = codexReader.checkAvailability()
-
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.snapshot = newSnapshot
-                self.cursorUsageByModel = cursorCounts
-                self.lastUpdated = Date()
-                self.isRefreshing = false
-                self.onSnapshotUpdated?(newSnapshot)
+        Task.detached(priority: .userInitiated) { [weak self] in
+            // O registry é reconstruído a cada varredura de propósito: assim uma edição em
+            // ~/.config/ai-quota/providers.json passa a valer sem reiniciar o app.
+            let registry = ProviderRegistry()
+            let overview = registry.buildOverview()
+            let sources = registry.providers.map {
+                ProviderSource(
+                    id: $0.id,
+                    displayName: $0.displayName,
+                    sourcePath: $0.sourcePath,
+                    kind: $0.kind,
+                    isInstalled: $0.isInstalled
+                )
             }
+            await self?.apply(overview: overview, sources: sources)
         }
     }
+
+    private func apply(overview: QuotaOverview, sources: [ProviderSource]) {
+        self.overview = overview
+        self.sources = sources
+        self.lastUpdated = Date()
+        self.isRefreshing = false
+        self.onOverviewUpdated?(overview)
+    }
+
+    // MARK: - Derivados para a UI
+
+    var primary: ProviderPresentation? {
+        guard let overview, let snapshot = overview.primary else { return nil }
+        return ProviderPresentation(snapshot: snapshot, isPrimary: true)
+    }
+
+    /// Provedores na ordem em que devem aparecer: o principal primeiro, depois os que têm dado,
+    /// e por último os indisponíveis (que ficam apagados no fim da lista).
+    var providerRows: [ProviderPresentation] {
+        guard let overview else { return [] }
+        return overview.providers
+            .map { ProviderPresentation(snapshot: $0, isPrimary: $0.providerId == overview.primaryProviderId) }
+            .sorted { lhs, rhs in
+                if lhs.isPrimary != rhs.isPrimary { return lhs.isPrimary }
+                let lhsDead = lhs.snapshot.kind == .unavailable
+                let rhsDead = rhs.snapshot.kind == .unavailable
+                if lhsDead != rhsDead { return rhsDead }
+                return lhs.displayName < rhs.displayName
+            }
+    }
+
+    var configWarnings: [String] { overview?.configWarnings ?? [] }
 }

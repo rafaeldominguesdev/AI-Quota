@@ -42,6 +42,8 @@ public struct CursorProvider: QuotaProvider {
             }
             .sorted { $0.eventCount > $1.eventCount }
 
+        let hourlyUsage = UsageWindowBuilder.hourlyBuckets(for: last.events, window: last.window) { _ in 1 }
+
         return ProviderSnapshot(
             providerId: id,
             displayName: displayName,
@@ -55,7 +57,8 @@ public struct CursorProvider: QuotaProvider {
             eventCount: last.events.count,
             byModel: byModel,
             officialLimit: nil,
-            note: "Sem dado de token: o Cursor só registra quantas vezes cada modelo foi usado."
+            note: "Sem dado de token: o Cursor só registra quantas vezes cada modelo foi usado.",
+            hourlyUsage: hourlyUsage
         )
     }
 }

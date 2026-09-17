@@ -17,14 +17,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusItem = item
 
-        let popover = NSPopover()
-        popover.behavior = .transient
-        popover.contentSize = NSSize(width: 320, height: 480)
-        popover.contentViewController = NSHostingController(rootView: PopoverContentView(store: store))
-        self.popover = popover
+        popover = makePopover()
 
-        store.onSnapshotUpdated = { [weak self] snapshot in
-            self?.updateStatusItem(with: snapshot)
+        store.onOverviewUpdated = { [weak self] overview in
+            self?.updateStatusItem(with: overview)
         }
         updateStatusItem(with: nil)
         store.startAutoRefresh()
@@ -32,6 +28,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         store.stopAutoRefresh()
+    }
+
+    // MARK: - Popover
+
+    private func makePopover() -> NSPopover {
+        let hostingController = NSHostingController(rootView: PopoverRootView(store: store))
+        // O SwiftUI dita a altura; o popover acompanha em vez de ter tamanho fixo.
+        hostingController.sizingOptions = [.preferredContentSize]
+
+        // Fundo preto de verdade: sem isto o macOS pinta o material claro do popover por baixo
+        // da view SwiftUI e as bordas ficam cinzentas.
+        hostingController.view.wantsLayer = true
+        hostingController.view.layer?.backgroundColor = NSColor.black.cgColor
+
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.appearance = NSAppearance(named: .darkAqua)
+        popover.contentViewController = hostingController
+        return popover
+    }
+
+    /// O popover desenha a moldura e a setinha num `NSVisualEffectView` próprio, fora da nossa
+    /// view SwiftUI. Sem mexer nele, sobra um halo translúcido claro em volta do painel preto.
+    private func forceOpaqueBackground(on popover: NSPopover) {
+        guard let frameView = popover.contentViewController?.view.superview else { return }
+        frameView.wantsLayer = true
+        frameView.layer?.backgroundColor = NSColor.black.cgColor
+        for case let effectView as NSVisualEffectView in frameView.subviews + [frameView] {
+            effectView.material = .hudWindow
+            effectView.state = .inactive
+            effectView.appearance = NSAppearance(named: .darkAqua)
+        }
     }
 
     @objc private func togglePopover(_ sender: Any?) {
@@ -42,39 +70,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Recalcula assim que o painel abre, para não mostrar dado velho de até 30s atrás.
             store.refreshNow()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            forceOpaqueBackground(on: popover)
             popover.contentViewController?.view.window?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
     }
 
-    /// Atualiza o ícone e o texto colorido do NSStatusItem a partir do snapshot mais recente.
-    private func updateStatusItem(with snapshot: QuotaSnapshot?) {
+    // MARK: - Barra de menu
+
+    /// Redesenha o medidor e o percentual do NSStatusItem a partir do overview mais recente.
+    /// O percentual mostrado é o do provedor principal, preferindo o limite OFICIAL quando o
+    /// provedor reporta um (dado medido) em vez da nossa estimativa por custo.
+    private func updateStatusItem(with overview: QuotaOverview?) {
         guard let button = statusItem?.button else { return }
 
-        // Ícone SF Symbol como template: monocromático, se adapta sozinho ao tema da barra de
-        // menu. A cor do ESTADO fica só no texto do percentual, nunca no ícone.
-        if button.image == nil {
-            let symbolName = "gauge.with.dots.needle.bottom.50percent"
-            let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "AI Quota")
-                ?? NSImage(systemSymbolName: "chart.pie.fill", accessibilityDescription: "AI Quota")
-            image?.isTemplate = true
-            button.image = image
+        let presentation = overview?.primary.map {
+            ProviderPresentation(snapshot: $0, isPrimary: true)
         }
 
-        let font = NSFont.menuBarFont(ofSize: 0)
-
-        guard let snapshot, snapshot.isActive else {
+        guard let presentation, let percent = presentation.percent, let level = presentation.level else {
+            button.image = MenuBarGauge.image(fraction: nil, color: Theme.NS.inkFaint)
             button.attributedTitle = NSAttributedString(
                 string: " —",
-                attributes: [.foregroundColor: StatusColor.neutralNSColor, .font: font]
+                attributes: [
+                    .foregroundColor: Theme.NS.inkFaint,
+                    .font: Theme.nsMono(11, .medium)
+                ]
             )
             return
         }
 
-        let percentText = " \(Int(snapshot.usagePercent.rounded()))%"
+        button.image = MenuBarGauge.image(fraction: percent / 100, color: level.nsColor)
         button.attributedTitle = NSAttributedString(
-            string: percentText,
-            attributes: [.foregroundColor: StatusColor.nsColor(for: snapshot.state), .font: font]
+            string: " \(Int(percent.rounded()))%",
+            attributes: [
+                .foregroundColor: level.nsColor,
+                .font: Theme.nsMono(11, .medium),
+                .kern: 0.4
+            ]
         )
     }
 }

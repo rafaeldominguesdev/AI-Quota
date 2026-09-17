@@ -49,6 +49,7 @@ public struct GeminiProvider: QuotaProvider {
         }
 
         let count = last.events.count
+        let hourlyUsage = UsageWindowBuilder.hourlyBuckets(for: last.events, window: last.window) { _ in 1 }
         return ProviderSnapshot(
             providerId: id,
             displayName: displayName,
@@ -64,7 +65,8 @@ public struct GeminiProvider: QuotaProvider {
                 ProviderModelUsage(model: "desconhecido", totalTokens: 0, eventCount: count, cost: nil, isEstimatedPricing: false)
             ],
             officialLimit: nil,
-            note: "Sem dado de token: o histórico local do Gemini só registra interações, não tokens."
+            note: "Sem dado de token: o histórico local do Gemini só registra interações, não tokens.",
+            hourlyUsage: hourlyUsage
         )
     }
 }

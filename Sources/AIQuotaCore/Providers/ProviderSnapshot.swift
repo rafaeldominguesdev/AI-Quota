@@ -48,6 +48,12 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
 
     public let byModel: [ProviderModelUsage]
 
+    /// Usage split into one bucket per hour of the window (always
+    /// `UsageWindowBuilder.hourlySlotCount` entries), so the UI can draw a sparkline of *when*
+    /// the window was burned, not just how much. Holds tokens for token-capable providers and
+    /// event counts for `.countOnly` ones; empty when there is nothing to plot.
+    public let hourlyUsage: [Int]
+
     /// Present only when the provider itself reports an official quota/rate limit (e.g. Codex's
     /// `rate_limits`). Never invented — nil means "no official limit found", not "zero used".
     public let officialLimit: OfficialLimitInfo?
@@ -68,7 +74,8 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
         eventCount: Int,
         byModel: [ProviderModelUsage],
         officialLimit: OfficialLimitInfo?,
-        note: String?
+        note: String?,
+        hourlyUsage: [Int] = []
     ) {
         self.providerId = providerId
         self.displayName = displayName
@@ -83,6 +90,7 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
         self.byModel = byModel
         self.officialLimit = officialLimit
         self.note = note
+        self.hourlyUsage = hourlyUsage
     }
 
     /// Convenience for the common "nothing to show" case (not installed, or installed but no
@@ -107,7 +115,8 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
             eventCount: 0,
             byModel: [],
             officialLimit: nil,
-            note: note
+            note: note,
+            hourlyUsage: []
         )
     }
 }
