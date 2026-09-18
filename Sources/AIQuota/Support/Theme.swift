@@ -4,47 +4,46 @@ import SwiftUI
 /// Único lugar do app onde valores visuais brutos existem. Todo o resto das views referencia
 /// constantes nomeadas daqui — nenhum hexadecimal solto espalhado pela interface.
 ///
-/// Os valores vêm de `docs/PILOTDECK-STYLE.md`: cinza-azulado escuro em degraus, borda visível
-/// desenhando cada caixa, acento NEUTRO (cinza quase branco) em vez de cor de marca, e vermelho
-/// dessaturado reservado ao alarme. A estrutura (mono, caixa alta, densidade) vem do DevTerm; a
-/// pele é do PilotDeck.
+/// Paleta do print de referência do usuário (dashboard de terminal minimalista): fundo quase
+/// preto, texto claro, marcador rosa por provedor, semáforo verde/vermelho/âmbar nas barras de
+/// cota. Câmbio de digitos: DevTerm/PilotDeck deram a estrutura (mono, caixa alta, densidade);
+/// esta paleta é a pele definitiva pedida por cima disso.
 enum Theme {
 
-    // MARK: - Cores (docs/PILOTDECK-STYLE.md §1)
+    // MARK: - Cores (paleta do print de referência)
 
-    /// Fundo (canvas). Preto quase liso, com uma pitada azulada — paleta pedida pelo usuário
-    /// para o painel em estilo TUI.
-    static let bg = Color(hex: 0x0D1117)
-    /// Superfície um degrau acima do fundo — e aqui o degrau se vê.
-    static let surface = Color(hex: 0x12161B)
+    /// Fundo (canvas).
+    static let bg = Color(hex: 0x101214)
+    /// Superfície um degrau acima do fundo.
+    static let surface = Color(hex: 0x16191C)
 
     /// Texto primário.
-    static let ink = Color(hex: 0xD6D6D6)
+    static let ink = Color(hex: 0xE2E2E2)
     /// Texto secundário.
-    static let inkDim = Color(hex: 0x858585)
+    static let inkDim = Color(hex: 0x92979D)
     /// Um passo abaixo do secundário, para texto de apoio que não deve competir.
-    static let inkMuted = Color(hex: 0x6E747D)
+    static let inkMuted = Color(hex: 0x7A8087)
     /// Texto apagado: provedor sem dado, caminhos de arquivo, traços de ausência.
-    static let inkFaint = Color(hex: 0x555B63)
+    static let inkFaint = Color(hex: 0x565C63)
 
     /// Cinza muito claro, quase branco. É acento por LUMINÂNCIA, não por cor.
     static let accent = Color(hex: 0xD7DBDF)
     /// Cinza médio de foco/realce.
     static let focus = Color(hex: 0x9AA3AD)
     /// Vermelho de alarme — só aparece quando há problema de verdade.
-    static let danger = Color(hex: 0xE05261)
-    /// O quadradinho antes da logo no cabeçalho de cada provedor — puramente decorativo (marca
-    /// de lista, não estado), por isso é uma constante própria em vez de reaproveitar `danger`.
-    static let groupDot = Color(hex: 0xE2574C)
+    static let danger = Color(hex: 0xE95760)
+    /// O pontinho antes da logo no cabeçalho de cada provedor — puramente decorativo (marca de
+    /// lista, não estado), por isso é uma constante própria em vez de reaproveitar `danger`.
+    static let groupDot = Color(hex: 0xC94F81)
 
     /// Semáforo de verdade — verde/âmbar/vermelho — nas janelas de cota (5h, semanal etc.): cada
     /// janela é um limite real que estoura, e a cor É a informação.
-    static let calm = Color(hex: 0x36D17A)
-    static let warn = Color(hex: 0xE5C447)
-    /// Azul-esverdeado da paleta pedida — reservado para acentos que não sejam nível de uso.
+    static let calm = Color(hex: 0x45C879)
+    static let warn = Color(hex: 0xD8AA35)
+    /// Azul-esverdeado da paleta — reservado para acentos que não sejam nível de uso.
     static let teal = Color(hex: 0x27A99D)
-    /// Roxo/azul da paleta pedida — idem.
-    static let violet = Color(hex: 0x8B7CFF)
+    /// Azul-violeta da paleta — idem (ex.: cabeçalho de um provedor "diferente" como o Kimi).
+    static let violet = Color(hex: 0x8C8BE7)
 
     /// A borda/divisória: linha discreta separando blocos.
     static let line = Color(hex: 0x28303A)
@@ -52,19 +51,19 @@ enum Theme {
     static let lineStrong = Color(hex: 0x323C48)
     /// Trilho das barrinhas de uso — mais escuro que a divisória, para a barra ficar legível sem
     /// competir com as linhas do painel.
-    static let track = Color(hex: 0x1F2933)
+    static let track = Color(hex: 0x1B2938)
 
     // MARK: - Cores em AppKit (NSStatusItem)
 
     enum NS {
-        static let bg = NSColor(hex: 0x0D1117)
+        static let bg = NSColor(hex: 0x101214)
         static let accent = NSColor(hex: 0xD7DBDF)
         static let focus = NSColor(hex: 0x9AA3AD)
-        static let danger = NSColor(hex: 0xE05261)
-        static let calm = NSColor(hex: 0x36D17A)
-        static let warn = NSColor(hex: 0xE5C447)
-        static let inkDim = NSColor(hex: 0x858585)
-        static let inkFaint = NSColor(hex: 0x555B63)
+        static let danger = NSColor(hex: 0xE95760)
+        static let calm = NSColor(hex: 0x45C879)
+        static let warn = NSColor(hex: 0xD8AA35)
+        static let inkDim = NSColor(hex: 0x92979D)
+        static let inkFaint = NSColor(hex: 0x565C63)
         /// Trilho da barrinha da barra de menu: mais claro que o trilho do painel, porque na
         /// barra de menu (bem menor) precisa de mais presença para o vazio ficar legível.
         static let track = NSColor(hex: 0x323944)
@@ -137,25 +136,24 @@ enum Theme {
     enum Metric {
         /// Espessura da borda. Continua 1px; o que mudou foi a cor ficar visível.
         static let border: CGFloat = 1
-        // Aumentados junto com o texto (era 308/16): letras maiores sem mais respiro deixava
-        // tudo espremido contra a borda.
-        static let panelWidth: CGFloat = 336
-        static let padding: CGFloat = 20
+        /// ~290px do print de referência, com 12px de margem interna.
+        static let panelWidth: CGFloat = 292
+        static let padding: CGFloat = 12
         /// Lado da logo da IA no painel.
         static let logoSide: CGFloat = 14
-        static let usageBarWidth: CGFloat = 72
+        static let usageBarWidth: CGFloat = 75
         static let usageBarHeight: CGFloat = 4
         /// Largura fixa da coluna do percentual, para os números não dançarem entre linhas.
-        static let percentColumnWidth: CGFloat = 40
+        static let percentColumnWidth: CGFloat = 32
 
         /// Recuo das linhas de janela sob o cabeçalho do provedor — alinha com o texto do nome,
         /// não com a logo.
         static let windowIndent: CGFloat = logoSide + 8
         /// Largura fixa do rótulo da janela ("5H", "SEMANAL"...), para a barra começar sempre na
         /// mesma coluna independente do tamanho do rótulo.
-        static let windowLabelWidth: CGFloat = 64
+        static let windowLabelWidth: CGFloat = 54
         /// Largura fixa do texto de reset ("em 4d10h", "resetou"), alinhado à direita.
-        static let resetColumnWidth: CGFloat = 62
+        static let resetColumnWidth: CGFloat = 64
         static let windowRowHeight: CGFloat = 18
     }
 

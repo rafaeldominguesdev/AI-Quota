@@ -61,10 +61,10 @@ struct ProviderRowView: View {
     /// "r•••@g•••.com                                      [P]" — o e-mail mascarado da conta
     /// logada, com o selo quadrado do plano à direita.
     private func accountRow(email: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Text(email)
-                .font(Theme.mono(Theme.Size.small))
-                .foregroundStyle(Theme.inkDim)
+                .font(Theme.mono(Theme.Size.small, .semibold))
+                .foregroundStyle(Theme.ink)
                 .lineLimit(1)
                 .truncationMode(.middle)
 
@@ -80,7 +80,7 @@ struct ProviderRowView: View {
     // MARK: - Linha de janela
 
     private func windowRow(_ window: QuotaWindowPresentation) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Text(window.label.uppercased())
                 .font(Theme.mono(Theme.Size.small, .medium))
                 .foregroundStyle(Theme.inkMuted)
@@ -102,7 +102,9 @@ struct ProviderRowView: View {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
                     Text(QuotaFormatting.resetIn(until: resetsAt, now: context.date))
                         .font(Theme.mono(Theme.Size.small))
-                        .foregroundStyle(Theme.inkFaint)
+                        // Crítico ganha o mesmo tom vermelho do percentual — "em 60d" com a
+                        // barra estourada não devia parecer um tempo qualquer, neutro.
+                        .foregroundStyle(window.level == .critical ? window.color : Theme.inkFaint)
                         .lineLimit(1)
                         .frame(width: Theme.Metric.resetColumnWidth, alignment: .trailing)
                 }

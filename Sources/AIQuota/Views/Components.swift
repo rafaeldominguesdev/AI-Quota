@@ -49,12 +49,12 @@ struct ActionSeparator: View {
 /// e-mail mascarado — é o `[M]`/`[P]` do print de referência do painel.
 struct PlanBadgeSquare: View {
     let letter: String
-    var side: CGFloat = 14
+    var side: CGFloat = 18
 
     var body: some View {
         Text(letter)
-            .font(Theme.mono(Theme.Size.micro, .bold))
-            .foregroundStyle(Theme.inkDim)
+            .font(Theme.mono(Theme.Size.small, .bold))
+            .foregroundStyle(Theme.ink)
             .frame(width: side, height: side)
             .overlay(
                 Rectangle()
