@@ -89,7 +89,6 @@ public struct CustomLogProvider: QuotaProvider {
             totalCost: totalCostSum,
             eventCount: windowEvents.count,
             byModel: byModel,
-            officialLimit: nil,
             note: resolvedKind == .countOnly ? "Sem dado de token configurado em providers.json — só contando eventos." : nil,
             hourlyUsage: hourlyUsage
         )

@@ -105,7 +105,7 @@ func printProviderBlock(_ provider: ProviderSnapshot) {
         break
     }
 
-    if let officialLimit = provider.officialLimit {
+    for officialLimit in provider.officialLimits {
         var line = "Limite oficial: \(Formatting.percent(officialLimit.usedPercent)) usado (\(officialLimit.label))"
         if let resetsAt = officialLimit.resetsAt {
             line += " — reseta \(Formatting.date(resetsAt))"

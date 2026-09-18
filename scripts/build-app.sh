@@ -30,6 +30,25 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp "$BINARY_PATH" "${MACOS_DIR}/${EXECUTABLE_NAME}"
 chmod +x "${MACOS_DIR}/${EXECUTABLE_NAME}"
 
+# Os recursos declarados no Package.swift (as logos das IAs) NÃO ficam dentro do binário: o
+# SwiftPM os empacota em bundles separados ao lado dele. Sem copiá-los para Contents/Resources,
+# o app funciona por `swift run` (que acha o bundle em .build) e chega ao usuário sem as logos.
+echo "==> Copiando bundles de recursos..."
+found_bundle=0
+for bundle in .build/release/*.bundle; do
+    [ -e "$bundle" ] || continue
+    cp -R "$bundle" "${RESOURCES_DIR}/"
+    echo "    $(basename "$bundle")"
+    found_bundle=1
+done
+if [ "$found_bundle" -eq 0 ]; then
+    echo "erro: nenhum .bundle encontrado em .build/release — o app ficaria sem as logos" >&2
+    exit 1
+fi
+
+echo "==> Copiando ícone do app..."
+cp "AppIcon/AppIcon.icns" "${RESOURCES_DIR}/AppIcon.icns"
+
 echo "==> Escrevendo Info.plist..."
 cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -44,6 +63,8 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <string>${BUNDLE_ID}</string>
     <key>CFBundleExecutable</key>
     <string>${EXECUTABLE_NAME}</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

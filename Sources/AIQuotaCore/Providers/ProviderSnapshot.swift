@@ -54,9 +54,19 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
     /// event counts for `.countOnly` ones; empty when there is nothing to plot.
     public let hourlyUsage: [Int]
 
-    /// Present only when the provider itself reports an official quota/rate limit (e.g. Codex's
-    /// `rate_limits`). Never invented — nil means "no official limit found", not "zero used".
-    public let officialLimit: OfficialLimitInfo?
+    /// Uma janela de rate-limit oficial por entrada (e.g. Codex reporta `primary` + `secondary`
+    /// separadamente). Nunca inventado — array vazio significa "nenhum limite oficial encontrado",
+    /// nunca "zero usado". A ordem importa: a primeira entrada é a mais urgente/representativa
+    /// (usada como o percentual único da barra de menu e do cabeçalho).
+    public let officialLimits: [OfficialLimitInfo]
+
+    /// Rótulo curto do plano do provedor (ex.: "plus", "pro"), quando ele reporta um. `nil` para
+    /// provedores que não expõem essa informação localmente.
+    public let planLabel: String?
+
+    /// E-mail da conta logada localmente, sem máscara — quem mascara é a UI, nunca o dado bruto.
+    /// `nil` para provedores que não guardam credenciais legíveis localmente (Grok, Cursor...).
+    public let accountEmail: String?
 
     /// Human-readable explanation for edge cases: not installed, no data, config errors, etc.
     public let note: String?
@@ -73,14 +83,17 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
         totalCost: Double?,
         eventCount: Int,
         byModel: [ProviderModelUsage],
-        officialLimit: OfficialLimitInfo?,
+        officialLimits: [OfficialLimitInfo] = [],
         note: String?,
-        hourlyUsage: [Int] = []
+        hourlyUsage: [Int] = [],
+        planLabel: String? = nil,
+        accountEmail: String? = nil
     ) {
         self.providerId = providerId
         self.displayName = displayName
         self.kind = kind
         self.isInstalled = isInstalled
+        self.accountEmail = accountEmail
         self.windowStart = windowStart
         self.windowEnd = windowEnd
         self.isActive = isActive
@@ -88,9 +101,10 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
         self.totalCost = totalCost
         self.eventCount = eventCount
         self.byModel = byModel
-        self.officialLimit = officialLimit
+        self.officialLimits = officialLimits
         self.note = note
         self.hourlyUsage = hourlyUsage
+        self.planLabel = planLabel
     }
 
     /// Convenience for the common "nothing to show" case (not installed, or installed but no
@@ -114,7 +128,6 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
             totalCost: nil,
             eventCount: 0,
             byModel: [],
-            officialLimit: nil,
             note: note,
             hourlyUsage: []
         )

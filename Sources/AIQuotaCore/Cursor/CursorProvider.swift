@@ -56,7 +56,6 @@ public struct CursorProvider: QuotaProvider {
             totalCost: nil,
             eventCount: last.events.count,
             byModel: byModel,
-            officialLimit: nil,
             note: "Sem dado de token: o Cursor só registra quantas vezes cada modelo foi usado.",
             hourlyUsage: hourlyUsage
         )

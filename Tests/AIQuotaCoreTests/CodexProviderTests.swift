@@ -70,10 +70,12 @@ struct CodexProviderTests {
         #expect(decoded?.limits.primary?.resets_at == 1788669903)
         #expect(decoded?.limits.plan_type == "plus")
 
-        let officialLimit = CodexProvider.officialLimit(from: decoded!.limits)
-        #expect(officialLimit != nil)
-        #expect(officialLimit?.usedPercent == 11.0)
-        #expect(officialLimit?.resetsAt == Date(timeIntervalSince1970: 1788669903))
+        let officialLimits = CodexProvider.officialLimits(from: decoded!.limits)
+        #expect(officialLimits.count == 2)
+        #expect(officialLimits[0].usedPercent == 11.0)
+        #expect(officialLimits[0].resetsAt == Date(timeIntervalSince1970: 1788669903))
+        #expect(officialLimits[1].usedPercent == 2.0)
+        #expect(officialLimits[1].resetsAt == Date(timeIntervalSince1970: 1789256703))
     }
 
     @Test("rate_limits com primary e secondary nulos não vira limite oficial")

@@ -1,23 +1,47 @@
 import SwiftUI
 import AIQuotaCore
 
-/// Uma linha do painel, e o painel é só uma pilha delas:
+/// Um provedor no painel, e o painel é só uma pilha deles:
 ///
-///     [logo]  NOME-DA-IA        [barrinha]  42%
+///     [logo]  NOME-DA-IA                                  PLUS
+///             5H      [barrinha]  27%              em 3h17m
+///             SEMANA  [barrinha]  46%              em 4d10h
 ///
-/// Provedor sem percentual troca a barra pelo dado que existir em texto apagado e o número por
-/// um traço.
+/// Provedor sem nenhuma janela de cota troca as linhas pelo dado que existir em texto apagado
+/// (tokens somados, contagem de usos) ou por um traço, quando não há nenhum dado.
 struct ProviderRowView: View {
     let presentation: ProviderPresentation
+    /// `false` quando um `ProviderGroupHeaderView` já desenhou a logo + o nome acima — o caso de
+    /// uma segunda (terceira...) conta do mesmo provedor, que não repete cabeçalho.
+    var showHeader: Bool = true
 
-    private var isDim: Bool { presentation.percent == nil }
+    private var windows: [QuotaWindowPresentation] { presentation.windows }
+    private var isDim: Bool { windows.isEmpty && presentation.fallbackValue == nil }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if showHeader { header }
+            if let email = presentation.maskedAccountEmail {
+                accountRow(email: email)
+            }
+            if windows.isEmpty {
+                fallbackRow
+            } else {
+                ForEach(windows) { window in
+                    windowRow(window)
+                }
+            }
+        }
+        .padding(.vertical, 10)
+    }
+
+    // MARK: - Cabeçalho
+
+    private var header: some View {
         HStack(spacing: 8) {
-            ProviderGlyphView(
-                glyph: ProviderGlyph.forProvider(id: presentation.id),
-                color: isDim ? Theme.inkDim : presentation.accent,
-                side: Theme.Metric.glyphSide
+            ProviderLogoView(
+                providerId: presentation.id,
+                glyphColor: isDim ? Theme.inkFaint : Theme.inkDim
             )
 
             Text(presentation.displayName)
@@ -29,57 +53,142 @@ struct ProviderRowView: View {
                 .truncationMode(.tail)
 
             Spacer(minLength: 6)
+        }
+    }
 
-            if let percent = presentation.percent {
-                UsageBar(fraction: percent / 100, color: presentation.accent)
-                    .animation(Theme.Motion.bar, value: percent)
+    // MARK: - Conta
 
-                Text(QuotaFormatting.percent(percent))
-                    .font(Theme.mono(Theme.Size.small, .medium))
-                    .foregroundStyle(presentation.accent)
-                    .frame(width: Theme.Metric.percentColumnWidth, alignment: .trailing)
+    /// "r•••@g•••.com                                      [P]" — o e-mail mascarado da conta
+    /// logada, com o selo quadrado do plano à direita.
+    private func accountRow(email: String) -> some View {
+        HStack(spacing: 8) {
+            Text(email)
+                .font(Theme.mono(Theme.Size.small))
+                .foregroundStyle(Theme.inkDim)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: 4)
+
+            if let letter = presentation.planBadgeLetter {
+                PlanBadgeSquare(letter: letter)
+            }
+        }
+        .padding(.leading, Theme.Metric.windowIndent)
+    }
+
+    // MARK: - Linha de janela
+
+    private func windowRow(_ window: QuotaWindowPresentation) -> some View {
+        HStack(spacing: 8) {
+            Text(window.label.uppercased())
+                .font(Theme.mono(Theme.Size.small, .medium))
+                .foregroundStyle(Theme.inkMuted)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(width: Theme.Metric.windowLabelWidth, alignment: .leading)
+
+            UsageBar(fraction: window.percent / 100, color: window.color)
+                .animation(Theme.Motion.bar, value: window.percent)
+
+            Text(QuotaFormatting.percent(window.percent))
+                .font(Theme.mono(Theme.Size.body, .medium))
+                .foregroundStyle(window.color)
+                .frame(width: Theme.Metric.percentColumnWidth, alignment: .trailing)
+
+            Spacer(minLength: 4)
+
+            if let resetsAt = window.resetsAt {
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    Text(QuotaFormatting.resetIn(until: resetsAt, now: context.date))
+                        .font(Theme.mono(Theme.Size.small))
+                        .foregroundStyle(Theme.inkFaint)
+                        .lineLimit(1)
+                        .frame(width: Theme.Metric.resetColumnWidth, alignment: .trailing)
+                }
             } else {
-                Text(presentation.fallbackValue ?? "")
-                    .font(Theme.mono(Theme.Size.micro))
-                    .foregroundStyle(Theme.inkFaint)
-                    .lineLimit(1)
-                    .frame(width: Theme.Metric.usageBarWidth, alignment: .trailing)
-
-                Text("—")
+                Text(window.isOfficial ? "" : "estim.")
                     .font(Theme.mono(Theme.Size.small))
                     .foregroundStyle(Theme.inkFaint)
-                    .frame(width: Theme.Metric.percentColumnWidth, alignment: .trailing)
+                    .lineLimit(1)
+                    .frame(width: Theme.Metric.resetColumnWidth, alignment: .trailing)
             }
-
-            // Marca mínima de que o percentual é oficial, e não estimativa nossa. A coluna é
-            // reservada mesmo quando vazia, senão as linhas desalinham.
-            ZStack {
-                if presentation.isPercentOfficial {
-                    Circle()
-                        .fill(Theme.secondary)
-                        .frame(width: Theme.Metric.officialDotSide, height: Theme.Metric.officialDotSide)
-                }
-            }
-            .frame(width: Theme.Metric.officialDotColumnWidth)
         }
-        .frame(height: Theme.Metric.rowHeight)
-        .help(tooltip)
+        .frame(height: Theme.Metric.windowRowHeight)
+        .padding(.leading, Theme.Metric.windowIndent)
+        .help(tooltip(for: window))
+    }
+
+    // MARK: - Sem nenhuma janela
+
+    private var fallbackRow: some View {
+        HStack(spacing: 8) {
+            Text(presentation.fallbackValue ?? presentation.note ?? "sem dado")
+                .font(Theme.mono(Theme.Size.micro))
+                .foregroundStyle(Theme.inkFaint)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer(minLength: 0)
+        }
+        .frame(height: Theme.Metric.windowRowHeight)
+        .padding(.leading, Theme.Metric.windowIndent)
     }
 
     /// Quem quiser saber o que a linha esconde passa o mouse — é o único lugar onde a explicação
     /// aparece, para o painel não virar texto.
-    private var tooltip: String {
-        if let official = presentation.snapshot.officialLimit {
-            var text = "Limite oficial do provedor"
-            if let resetsAt = official.resetsAt {
+    private func tooltip(for window: QuotaWindowPresentation) -> String {
+        if window.isOfficial {
+            var text = "Limite oficial do provedor — janela \"\(window.label)\""
+            if let resetsAt = window.resetsAt {
                 text += " — reseta às \(QuotaFormatting.time(resetsAt))"
             }
             return text
         }
         if let note = presentation.note { return note }
-        if let resetsAt = presentation.resetsAt {
-            return "Uso estimado na janela de 5h — reseta às \(QuotaFormatting.time(resetsAt))"
+        if let resetsAt = window.resetsAt {
+            return "Uso estimado — reseta às \(QuotaFormatting.time(resetsAt))"
         }
         return presentation.displayName
+    }
+}
+
+/// Cabeçalho de um `ProviderGroup`: a logo e o nome aparecem UMA vez por provedor, mesmo quando
+/// ele tem mais de uma conta (`MultiAccountDiscovery`) — cada conta desenha só o bloco de
+/// e-mail + janelas, via `ProviderRowView(showHeader: false)`, empilhado logo abaixo.
+///
+///     ● [logo]  NOME-DA-IA
+///       g•••@l•••.com.br                                    [M]
+///       Semana  [barrinha]  46%                        em 4d10h
+///       5h      [barrinha]  27%                        em 3h17m
+struct ProviderGroupHeaderView: View {
+    let group: ProviderGroup
+
+    private var isDim: Bool {
+        group.accounts.allSatisfy { $0.windows.isEmpty && $0.fallbackValue == nil }
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Circle()
+                .fill(isDim ? Theme.inkFaint : Theme.groupDot)
+                .frame(width: 5, height: 5)
+
+            ProviderLogoView(
+                providerId: group.id,
+                glyphColor: isDim ? Theme.inkFaint : Theme.inkDim
+            )
+
+            Text(group.displayName)
+                .font(Theme.mono(Theme.Size.micro, .bold))
+                .tracking(Theme.tracking(Theme.Em.label, at: Theme.Size.micro))
+                .textCase(.uppercase)
+                .foregroundStyle(isDim ? Theme.inkFaint : Theme.ink)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer(minLength: 6)
+        }
+        .padding(.top, 10)
     }
 }

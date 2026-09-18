@@ -2,12 +2,12 @@ import SwiftUI
 
 /// A hairline de 1px: é o único separador do painel.
 struct Hairline: View {
-    var color: Color = Theme.hairline
+    var color: Color = Theme.line
 
     var body: some View {
         Rectangle()
             .fill(color)
-            .frame(height: Theme.Metric.hairline)
+            .frame(height: Theme.Metric.border)
     }
 }
 
@@ -41,7 +41,25 @@ struct ActionSeparator: View {
     var body: some View {
         Text("·")
             .font(Theme.mono(Theme.Size.micro))
-            .foregroundStyle(Theme.hairlineStrong)
+            .foregroundStyle(Theme.lineStrong)
+    }
+}
+
+/// O selo quadrado com a inicial do plano da conta ("P" de Plus/Pro, "M" de Max), ao lado do
+/// e-mail mascarado — é o `[M]`/`[P]` do print de referência do painel.
+struct PlanBadgeSquare: View {
+    let letter: String
+    var side: CGFloat = 14
+
+    var body: some View {
+        Text(letter)
+            .font(Theme.mono(Theme.Size.micro, .bold))
+            .foregroundStyle(Theme.inkDim)
+            .frame(width: side, height: side)
+            .overlay(
+                Rectangle()
+                    .strokeBorder(Theme.line, lineWidth: Theme.Metric.border)
+            )
     }
 }
 
@@ -55,7 +73,7 @@ struct UsageBar: View {
     var body: some View {
         ZStack(alignment: .leading) {
             Capsule()
-                .fill(Theme.hairline)
+                .fill(Theme.track)
             Capsule()
                 .fill(color)
                 // Abaixo de uma altura de largura não há proporção para mostrar: o mínimo

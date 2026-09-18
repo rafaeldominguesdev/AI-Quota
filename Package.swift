@@ -25,7 +25,11 @@ let package = Package(
         ),
         .executableTarget(
             name: "AIQuota",
-            dependencies: ["AIQuotaCore"]
+            dependencies: ["AIQuotaCore"],
+            // As logos das IAs. O SwiftPM empacota isso num bundle separado
+            // (AIQuota_AIQuota.bundle) que o scripts/build-app.sh precisa copiar para dentro do
+            // .app — sem isso o app instalado roda sem as logos.
+            resources: [.copy("Resources")]
         ),
         .testTarget(
             name: "AIQuotaCoreTests",

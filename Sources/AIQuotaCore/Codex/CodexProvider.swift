@@ -6,17 +6,36 @@ import Foundation
 /// cumulative `total_token_usage` and a per-turn `last_token_usage`. We sum `last_token_usage`
 /// deltas, never the cumulative counter (see `CodexSessionLine.swift` for why).
 public struct CodexProvider: QuotaProvider {
-    public let id = "codex"
-    public let displayName = "Codex"
+    public let id: String
+    public let displayName: String
     public let kind: ProviderDataKind = .fullTokens
 
     private let sessionsDirectory: URL
+    private let accountReader: CodexAccountReader
+    private let recentWindow: TimeInterval
+    private let now: @Sendable () -> Date
 
+    /// `id`/`displayName` têm outro valor só para uma segunda (terceira...) conta descoberta por
+    /// `MultiAccountDiscovery` — a conta padrão continua "codex"/"Codex".
+    ///
+    /// `recentWindow` (padrão 24h): só o rate limit e a janela de uso mais recentes importam
+    /// aqui, então arquivos de sessão não tocados há mais tempo que isso nem são abertos — sem
+    /// isto, cada refresh de 30s reprocessava centenas de MB de sessões antigas à toa.
     public init(
         sessionsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex/sessions")
+            .appendingPathComponent(".codex/sessions"),
+        accountReader: CodexAccountReader = CodexAccountReader(),
+        id: String = "codex",
+        displayName: String = "Codex",
+        recentWindow: TimeInterval = 24 * 3600,
+        now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.sessionsDirectory = sessionsDirectory
+        self.accountReader = accountReader
+        self.id = id
+        self.displayName = displayName
+        self.recentWindow = recentWindow
+        self.now = now
     }
 
     public var sourcePath: String { sessionsDirectory.path }
@@ -68,7 +87,7 @@ public struct CodexProvider: QuotaProvider {
         let windowEvents = last.events
         let totalTokens = windowEvents.reduce(0) { $0 + $1.totalTokens }
         let modelName = latestModel?.model ?? "desconhecido"
-        let officialLimit = latestRateLimits.flatMap { Self.officialLimit(from: $0.limits) }
+        let officialLimits = latestRateLimits.map { Self.officialLimits(from: $0.limits) } ?? []
         let hourlyUsage = UsageWindowBuilder.hourlyBuckets(
             for: windowEvents,
             window: last.window,
@@ -97,41 +116,48 @@ public struct CodexProvider: QuotaProvider {
                     isEstimatedPricing: false
                 )
             ],
-            officialLimit: officialLimit,
-            note: officialLimit == nil
+            officialLimits: officialLimits,
+            note: officialLimits.isEmpty
                 ? "Nenhum rate limit oficial encontrado nas sessões locais; mostrando apenas tokens somados."
                 : nil,
-            hourlyUsage: hourlyUsage
+            hourlyUsage: hourlyUsage,
+            planLabel: latestRateLimits?.limits.plan_type,
+            accountEmail: accountReader.read()?.email
         )
     }
 
     private func findSessionFiles() -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: sessionsDirectory,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
             return []
         }
+        let cutoff = now().addingTimeInterval(-recentWindow)
         var files: [URL] = []
         for case let url as URL in enumerator where url.pathExtension == "jsonl" {
+            let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+            if let modified, modified < cutoff { continue }
             files.append(url)
         }
         return files
     }
 
-    /// Builds an `OfficialLimitInfo` from Codex's `primary` rate-limit window (the shorter,
-    /// more immediate one — typically 5h — vs. `secondary`, usually a weekly window).
-    static func officialLimit(from limits: CodexRateLimitsPayload) -> OfficialLimitInfo? {
-        guard let primary = limits.primary else { return nil }
-        let resetDate = primary.resets_at.map { Date(timeIntervalSince1970: Double($0)) }
-        let windowLabel = primary.window_minutes.map(windowLabel(minutes:)) ?? "janela"
-        let planLabel = limits.plan_type.map { " · plano \($0)" } ?? ""
-        return OfficialLimitInfo(
-            label: "Codex (\(windowLabel))\(planLabel)",
-            usedPercent: primary.used_percent ?? 0,
-            resetsAt: resetDate
-        )
+    /// Builds one `OfficialLimitInfo` per rate-limit window that Codex reports: `primary` (a
+    /// janela mais curta e imediata, tipicamente 5h) e `secondary` (geralmente semanal). Cada uma
+    /// vira uma linha própria na UI — nunca combinadas numa média.
+    static func officialLimits(from limits: CodexRateLimitsPayload) -> [OfficialLimitInfo] {
+        [limits.primary, limits.secondary].compactMap { window in
+            guard let window else { return nil }
+            let resetDate = window.resets_at.map { Date(timeIntervalSince1970: Double($0)) }
+            let label = window.window_minutes.map(windowLabel(minutes:)) ?? "janela"
+            return OfficialLimitInfo(
+                label: label,
+                usedPercent: window.used_percent ?? 0,
+                resetsAt: resetDate
+            )
+        }
     }
 
     private static func windowLabel(minutes: Int) -> String {

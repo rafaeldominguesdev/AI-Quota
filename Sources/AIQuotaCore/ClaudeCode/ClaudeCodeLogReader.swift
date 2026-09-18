@@ -3,15 +3,29 @@ import Foundation
 /// Varre ~/.claude/projects/**/*.jsonl e extrai os eventos de uso de tokens.
 public struct ClaudeCodeLogReader: Sendable {
     public let projectsDirectory: URL
+    private let recentWindow: TimeInterval
+    private let now: @Sendable () -> Date
 
+    /// Só a janela de 5h mais recente interessa aqui (ver `FiveHourBlockBuilder`) — um arquivo
+    /// que não é escrito há mais de `recentWindow` não pode ter nenhum evento dentro dela.
+    /// O padrão (24h) é bem mais folgado que as 5h que de fato importam, de propósito: cobre
+    /// qualquer estranheza de fuso/relógio sem custar quase nada a mais de I/O.
     public init(
         projectsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/projects")
+            .appendingPathComponent(".claude/projects"),
+        recentWindow: TimeInterval = 24 * 3600,
+        now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.projectsDirectory = projectsDirectory
+        self.recentWindow = recentWindow
+        self.now = now
     }
 
-    /// Lê todos os arquivos .jsonl, decodifica as linhas com uso de tokens e deduplica.
+    /// Lê os arquivos .jsonl tocados recentemente, decodifica as linhas com uso de tokens e
+    /// deduplica. Antes disso lia TODO o histórico (centenas de MB, às vezes gigabytes) a cada
+    /// refresh de 30s — a maior parte de arquivos parados há dias/semanas, que não podiam
+    /// pertencer ao bloco de 5h atual de qualquer forma. Isso sozinho bastava pra deixar o app
+    /// pesado na CPU e no consumo de energia em background.
     public func readAllEvents() -> [UsageEvent] {
         let files = findJSONLFiles()
         var rawEvents: [UsageEvent] = []
@@ -24,14 +38,20 @@ public struct ClaudeCodeLogReader: Sendable {
     func findJSONLFiles() -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: projectsDirectory,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
             return []
         }
 
+        let cutoff = now().addingTimeInterval(-recentWindow)
         var files: [URL] = []
         for case let url as URL in enumerator where url.pathExtension == "jsonl" {
+            let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+            // Arquivo não tocado desde antes do corte: não pode ter nenhum evento dentro da
+            // janela de 5h atual, então nem vale a pena abrir. Sem data legível (raro), inclui
+            // por segurança em vez de descartar em silêncio.
+            if let modified, modified < cutoff { continue }
             files.append(url)
         }
         return files

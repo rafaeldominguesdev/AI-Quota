@@ -1,15 +1,24 @@
 import SwiftUI
-import AppKit
 import AIQuotaCore
 
-/// Tela de provedores: onde cada IA é lida em disco, os erros do `providers.json` quando houver,
-/// e como adicionar outras IAs. Mesma dieta do painel — sem molduras, só hairlines.
+/// Tela de contas: o status de cada IA que o app conhece (conectada, com a conta e o plano; ou
+/// não, com o motivo em português). Mesma dieta do painel — sem molduras, só espaçamento.
 struct ProvidersScreenView: View {
     @ObservedObject var store: QuotaStore
     let onBack: () -> Void
 
+    /// `store.sources` traz TODOS os provedores registrados (inclusive os sem dado nenhum) na
+    /// ordem certa; `store.providerRows` traz o retrato rico (e-mail, plano, motivo) de cada um.
+    /// Cruza os dois pelo id em vez de escolher um só, porque nenhum dos dois sozinho tem as
+    /// duas coisas.
+    private var presentationsById: [String: ProviderPresentation] {
+        Dictionary(uniqueKeysWithValues: store.providerRows.map { ($0.id, $0) })
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            sectionLabel("Contas")
+
             if store.sources.isEmpty {
                 Text("Varrendo o disco…")
                     .font(Theme.mono(Theme.Size.micro))
@@ -17,51 +26,83 @@ struct ProvidersScreenView: View {
                     .padding(.horizontal, Theme.Metric.padding)
                     .padding(.vertical, 10)
             } else {
-                ForEach(Array(store.sources.enumerated()), id: \.element.id) { index, source in
-                    if index > 0 {
-                        Hairline()
-                    }
-                    sourceRow(source)
+                let presentations = presentationsById
+                ForEach(Array(store.sources.enumerated()), id: \.element.id) { _, source in
+                    accountRow(source, presentation: presentations[source.id])
                         .padding(.horizontal, Theme.Metric.padding)
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 9)
                 }
             }
 
             if !store.configWarnings.isEmpty {
-                Hairline()
                 warnings
             }
 
-            Hairline()
             actions
         }
     }
 
-    private func sourceRow(_ source: ProviderSource) -> some View {
-        HStack(spacing: 8) {
-            ProviderGlyphView(
-                glyph: ProviderGlyph.forProvider(id: source.id),
-                color: source.isInstalled ? Theme.inkDim : Theme.inkFaint,
-                side: Theme.Metric.glyphSide
+    private func sectionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(Theme.mono(Theme.Size.micro, .bold))
+            .tracking(Theme.tracking(Theme.Em.label, at: Theme.Size.micro))
+            .textCase(.uppercase)
+            .foregroundStyle(Theme.inkMuted)
+            .padding(.horizontal, Theme.Metric.padding)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+    }
+
+    // MARK: - Linha de conta
+
+    private func accountRow(_ source: ProviderSource, presentation: ProviderPresentation?) -> some View {
+        let isConnected = presentation?.maskedAccountEmail != nil
+        return HStack(alignment: .top, spacing: 8) {
+            ProviderLogoView(
+                providerId: source.id,
+                glyphColor: isConnected ? Theme.inkDim : Theme.inkFaint
             )
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(source.displayName)
-                    .font(Theme.mono(Theme.Size.small, .medium))
-                    .tracking(Theme.tracking(Theme.Em.subtle, at: Theme.Size.small))
-                    .textCase(.uppercase)
-                    .foregroundStyle(source.isInstalled ? Theme.ink : Theme.inkFaint)
-                    .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(source.displayName)
+                        .font(Theme.mono(Theme.Size.small, .medium))
+                        .tracking(Theme.tracking(Theme.Em.subtle, at: Theme.Size.small))
+                        .textCase(.uppercase)
+                        .foregroundStyle(isConnected ? Theme.ink : Theme.inkFaint)
+                        .lineLimit(1)
 
-                Text(Self.shortenHome(source.sourcePath))
+                    Spacer(minLength: 4)
+
+                    if isConnected {
+                        Text("CONECTADO")
+                            .font(Theme.mono(Theme.Size.micro, .bold))
+                            .tracking(Theme.tracking(Theme.Em.label, at: Theme.Size.micro))
+                            .foregroundStyle(Theme.calm)
+                    }
+
+                    if let letter = presentation?.planBadgeLetter, isConnected {
+                        PlanBadgeSquare(letter: letter, side: 14)
+                    }
+                }
+
+                Text(statusLine(source: source, presentation: presentation))
                     .font(Theme.mono(Theme.Size.micro))
-                    .foregroundStyle(Theme.inkFaint)
+                    .foregroundStyle(isConnected ? Theme.inkDim : Theme.inkFaint)
                     .lineLimit(1)
-                    .truncationMode(.head)
+                    .truncationMode(.tail)
             }
-
-            Spacer(minLength: 0)
         }
+        .help(Self.shortenHome(source.sourcePath))
+    }
+
+    /// O que mostrar embaixo do nome: o e-mail mascarado para quem está conectado, ou o motivo
+    /// em português de por que não está (nunca o caminho cru — esse fica só na dica do hover).
+    private func statusLine(source: ProviderSource, presentation: ProviderPresentation?) -> String {
+        if let email = presentation?.maskedAccountEmail { return email }
+        if !source.isInstalled { return "Não instalado neste Mac" }
+        if let note = presentation?.note { return note }
+        return "Instalado, sem dado de uso ainda"
     }
 
     /// É por aqui que o usuário descobre que errou o JSON — nunca silencioso.
@@ -75,32 +116,19 @@ struct ProvidersScreenView: View {
             }
         }
         .padding(.horizontal, Theme.Metric.padding)
-        .padding(.vertical, 7)
+        .padding(.vertical, 10)
     }
 
     private var actions: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Outras IAs entram editando providers.json.")
-                .font(Theme.mono(Theme.Size.micro))
-                .foregroundStyle(Theme.inkMuted)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 6) {
-                TextAction(title: "Abrir configuração") { openConfigFile() }
-                ActionSeparator()
-                TextAction(title: "Voltar", action: onBack)
-                Spacer(minLength: 0)
-            }
+        HStack(spacing: 6) {
+            TextAction(title: "Detectar contas") { store.refreshNow() }
+            ActionSeparator()
+            TextAction(title: "Voltar", action: onBack)
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, Theme.Metric.padding)
-        .padding(.vertical, 7)
-    }
-
-    /// Cria o arquivo com os padrões comentados se ainda não existir, e só então abre — para o
-    /// botão nunca levar a um "arquivo não encontrado".
-    private func openConfigFile() {
-        ProvidersConfigStore.ensureDefaultFileExists()
-        NSWorkspace.shared.open(ProvidersConfigStore.defaultFile)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
     }
 
     private static func shortenHome(_ path: String) -> String {
