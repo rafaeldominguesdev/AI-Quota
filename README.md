@@ -1,92 +1,87 @@
 # AI Quota
 
-App de barra de menu do macOS que mostra, por IA que você usa (Claude Code, Codex, Cursor,
-Antigravity, Grok e qualquer CLI customizado), quanto já foi consumido da janela de uso atual e
-quando ela reseta — direto na barra de menu, sem abrir terminal nem entrar no site de cada uma.
+App de barra de menu do macOS que mostra, por IA, quanto da cota atual já foi usada e quando ela
+reseta — sem abrir terminal nem entrar no site de cada uma. Suporta Claude Code, Codex,
+Antigravity, Cursor, Grok e qualquer CLI customizado.
 
-Tudo roda localmente: o app lê os logs/config que cada CLI já grava no seu disco. A única exceção
-é o Claude Code, que também pode buscar o percentual ao vivo direto da Anthropic (ver
-[Privacidade](#privacidade) abaixo) — nada é enviado para nenhum servidor deste projeto.
+Tudo roda localmente: o app lê os logs e configs que cada CLI já grava no disco. Duas exceções,
+que continuam usando só o seu próprio token e nunca um servidor deste projeto: o Claude Code, que
+busca o percentual direto no endpoint da Anthropic, e o Antigravity, que roda o próprio CLI (`agy`)
+para obter a cota. Ver [Privacidade](#privacidade).
 
 ## O painel
 
-Clicar no ícone da barra de menu abre um painel com uma seção por IA: logo, e-mail mascarado da
-conta, selo do plano (`[P]`/`[M]`) e uma barra por janela de cota que a IA reporta (sessão de 5h,
-semanal...). Quem tem mais de uma conta logada na mesma IA (ver
-[Múltiplas contas](#múltiplas-contas) abaixo) vê as duas empilhadas sob o mesmo cabeçalho.
+Clicar no ícone abre um painel com uma seção por IA: logo, e-mail mascarado da conta, uma barra
+por janela de cota (5h, semanal) e uma tecla que abre a página da IA no navegador.
 
 ```
-AI QUOTA                                                    1h17m
+AI QUOTA                                          2h56m
 
-● [logo]  CLAUDE CODE
-          r•••@g•••.com                                       [P]
-          5H      [██████░░░░░░░░░░░░░░]  50%           em 1h17m
-          SEMANAL  [███░░░░░░░░░░░░░░░░░]  30%            em 6d0h
+  CLAUDE CODE                                       [C]
+  r•••@g•••.com
+  5H       [██████░░░░░░░░]  71%             em 2h56m
+  SEMANAL  [██████░░░░░░░░]  66%             em 4d17h
 
-● [logo]  CODEX (GPT)
-          r•••@g•••.com                                       [P]
-          5H      [██░░░░░░░░░░░░░░░░░░]  13%           em 3h54m
-          SEMANAL  [███████████░░░░░░░░]  75%           em 2d18h
+  ANTIGRAVITY                                       [A]
+  r•••@g•••.com
+  SEMANAL  [█░░░░░░░░░░░░░]   5%             em 6d23h
 
-US$ 22,32 · 83,2 M tokens
+  CODEX (GPT)                                       [X]
+  r•••@g•••.com
+  5H       [░░░░░░░░░░░░░░]   0%
+  SEMANAL  [██████████░░░░]  75%             em 1d11h
 
-Retrospecto
-Abre no navegador o histórico de consumo das contas
+  US$ 26,62 · 43,6 M tokens
 
-· Iniciar no login
-
-Ajustes
-Atualizar leituras
-Encerrar
+  Retrospecto
+  Ajustes
+  Atualizar leituras
+  Encerrar
 ```
 
-- A cor da barra segue o nível de uso (verde → âmbar → vermelho), igual em toda janela de cota.
-- **Retrospecto** gera, na hora, um relatório HTML local (dia a dia: tokens e custo estimado) a
-  partir dos logs do Claude Code, e abre no navegador padrão — nenhum dado sai da máquina.
-- **Atualizar leituras** força uma checagem imediata; o app já atualiza sozinho a cada 30s
-  enquanto estiver aberto, então isso é só para confirmar na hora (ex.: acabou de rodar o CLI).
+- A cor da barra segue o nível de uso: verde, âmbar, vermelho.
+- Cada IA tem uma tecla (Claude=C, Codex=X, Antigravity=A, Cursor=U, Grok=K) que abre a página de
+  conta dela no navegador.
+- **Retrospecto** gera um relatório HTML local (dia a dia: tokens e custo estimado dos logs do
+  Claude Code) e abre no navegador. Nada sai da máquina.
+- **Atualizar leituras** força uma checagem na hora; o app já atualiza sozinho a cada 30s.
 
-## Múltiplas contas
+## Ajustes
 
-Se você roda mais de uma conta do Claude Code ou do Codex ao mesmo tempo — cada terminal
-apontando `CLAUDE_CONFIG_DIR`/`CODEX_HOME` para uma pasta diferente —, o app detecta
-automaticamente qualquer pasta em `$HOME` que comece com `.claude`/`.codex` (ex.: `.claude-work`)
-e contenha o arquivo de conta esperado, e mostra cada uma como uma conta separada sob o mesmo
-cabeçalho do provedor. É heurística (não há API documentada para isso), então se uma segunda conta
-de verdade não aparecer, esse é o primeiro lugar a revisar (`MultiAccountDiscovery.swift`).
+Item **Ajustes** abre uma janela com três abas:
 
-## Como compilar
+- **STATUS**: as contas conectadas, uma por card com a barra de cota.
+- **CONECTAR**: as IAs conhecidas que ainda não estão conectadas, com o caminho no disco.
+- **AJUSTES**: "Iniciar no login" (via `SMAppService`, só marca quando o macOS confirma) e os
+  caminhos dos arquivos de configuração.
 
-Requer apenas o Xcode Command Line Tools (sem Xcode completo) e Swift Package Manager.
+## Compilar e instalar
+
+Requer apenas o Xcode Command Line Tools e o Swift Package Manager.
 
 ```bash
 bash scripts/build-app.sh
 ```
 
-Isso gera `dist/AI Quota.app`, já assinado ad-hoc e pronto para rodar. O script é
-idempotente — pode rodar quantas vezes quiser.
+Gera `dist/AI Quota.app`, assinado ad-hoc e pronto para rodar (o script é idempotente). Arraste-o
+para `/Applications` e abra normalmente. O app vive só na barra de menu — não aparece no Dock nem
+no Cmd+Tab.
 
-## Como instalar
+## CLI
 
-Arraste `dist/AI Quota.app` para `/Applications`. Depois é só abrir normalmente
-(Spotlight, Launchpad ou dando duplo clique). O app não aparece no Dock nem no Cmd+Tab —
-ele vive só na barra de menu. "Iniciar no login" no rodapé do painel registra o app como item
-de login de verdade (via `SMAppService`), sem otimismo: só marca quando o macOS confirma.
-
-## Rodando só o núcleo (CLI)
+O mesmo núcleo roda em linha de comando:
 
 ```bash
 swift run aiquota-cli              # um bloco por provedor, saída legível
 swift run aiquota-cli --json       # o mesmo, em JSON (QuotaOverview)
-swift run aiquota-cli --providers  # só lista os provedores detectados e o caminho de cada um
+swift run aiquota-cli --providers  # lista os provedores detectados e o caminho de cada um
 ```
 
-## Adicionando outras IAs
+## Adicionar outras IAs
 
-Se você usa um CLI de IA que este app não conhece (GLM, Qwen, DeepSeek, ou qualquer outro que
-escreva logs em JSONL), dá pra adicionar sem recompilar nada. Edite
-`~/.config/ai-quota/providers.json` (o app cria esse arquivo sozinho, com um exemplo comentado,
-na primeira vez que rodar) e acrescente um item em `"custom"`:
+Um CLI que o app não conhece, desde que escreva logs em JSONL, entra sem recompilar. Edite
+`~/.config/ai-quota/providers.json` (criado sozinho, com um exemplo comentado, na primeira
+execução) e acrescente um item em `"custom"`:
 
 ```json
 {
@@ -109,78 +104,50 @@ na primeira vez que rodar) e acrescente um item em `"custom"`:
 }
 ```
 
-Campo a campo:
+- `logGlob`: onde procurar os logs. Aceita um `**` para busca recursiva.
+- `timestampPath`, `modelPath`, `inputTokensPath`, `outputTokensPath`, `totalTokensPath`: caminhos
+  de chave separados por ponto dentro de cada linha JSON. Só `timestampPath` é obrigatório; sem os
+  de token o provedor vira "só total" ou "só contagem".
+- `cumulative`: `true` se os contadores forem totais acumulados da sessão (como o Codex); o app
+  calcula os deltas.
+- `pricing`: opcional, preço por 1 milhão de tokens de entrada/saída, para estimar custo.
 
-- `logGlob`: onde procurar os arquivos de log. Suporta um `**` para busca recursiva (ex.:
-  `~/.glm/sessions/**/*.jsonl`).
-- `timestampPath`, `modelPath`, `inputTokensPath`, `outputTokensPath`, `totalTokensPath`:
-  caminhos de chave separados por ponto dentro de cada linha JSON do log (ex.: um campo em
-  `payload.info.usage.input_tokens` vira `"payload.info.usage.input_tokens"`). Todos exceto
-  `timestampPath` são opcionais — sem `inputTokensPath`/`outputTokensPath` mas com
-  `totalTokensPath`, o provedor vira "só total de tokens"; sem nenhum dos três, vira "só
-  contagem de interações".
-- `cumulative`: `true` se os contadores de token no log forem totais acumulados da sessão
-  (como o Codex) em vez de já virem por evento — nesse caso o app calcula os deltas sozinho,
-  por arquivo, na ordem em que aparecem.
-- `pricing`: opcional. Se seu provedor cobra por token (diferente de assinatura fixa), informe
-  o preço por 1 milhão de tokens de entrada/saída para ter uma estimativa de custo.
+Um provedor malformado é ignorado (a mensagem sai em `configWarnings`), sem derrubar o resto.
 
-Um provedor customizado malformado (sem `id`, `logGlob` etc.) é **ignorado**, não derruba o
-resto — a mensagem de erro aparece em `configWarnings` no `--json` e como aviso no CLI normal.
-
-### A logo da sua IA
-
-O app procura a imagem nesta ordem:
-
-1. `~/.config/ai-quota/logos/<id-do-provedor>.png` — também aceita `.svg`, `.webp`, `.jpg` e
-   `.jpeg`. É só criar a pasta e soltar o arquivo com o `id` que você deu ao provedor no
-   `providers.json` (ex.: `~/.config/ai-quota/logos/glm.png` para o exemplo acima).
-2. A logo que já vem embutida no app, quando existe: Claude Code, Codex, Grok, DeepSeek, Meta
-   e Antigravity.
-3. Um glifo geométrico desenhado pelo próprio app, para quem não tem nenhuma das duas.
+Para a logo, o app procura, nesta ordem: `~/.config/ai-quota/logos/<id>.png` (também `.svg`,
+`.webp`, `.jpg`, `.jpeg`); a logo embutida (Claude Code, Codex, Antigravity, Cursor, Grok,
+DeepSeek, Meta); ou um glifo desenhado pelo próprio app.
 
 ## Privacidade
 
-- O app só lê arquivos que já existem no seu disco (logs, configs, o `~/.claude.json` que o
-  próprio Claude Code mantém) — nada é enviado para nenhum servidor deste projeto, e não há
-  telemetria nem analytics de nenhum tipo.
-- **Exceção**: para o Claude Code, o app também pode buscar o percentual de uso **direto no
-  endpoint oficial da Anthropic** (o mesmo que o `claude.ai`/CLI usam), porque o cache local
-  (`~/.claude.json`) só é atualizado quando você roda o `claude` — se você passa um tempo sem
-  usá-lo, o número local fica desatualizado. Essa chamada usa o **seu próprio token OAuth**,
-  lido de `~/.claude/.credentials.json` ou do Keychain do macOS (item "Claude Code-credentials",
-  o mesmo que o CLI já usa), enviado só para `api.anthropic.com` — nunca para nenhum outro
-  destino. Ver `Sources/AIQuotaCore/ClaudeCode/ClaudeLiveUsageReader.swift`.
-- O e-mail da conta aparece sempre mascarado no painel (`r•••@g•••.com`).
-- `~/.grok` guarda a chave de API do Grok em texto puro — o app nunca lê esse arquivo (não há
-  uso local pra ler ali mesmo), mas trate-o como sensível por conta própria.
+- O app só lê arquivos que já existem no disco. Sem telemetria, sem analytics, sem servidor deste
+  projeto.
+- **Claude Code**: além do cache local, busca o percentual no endpoint oficial da Anthropic
+  (`api.anthropic.com`), usando o seu token OAuth de `~/.claude/.credentials.json` ou do Keychain.
+  Ver `Sources/AIQuotaCore/ClaudeCode/ClaudeLiveUsageReader.swift`.
+- **Antigravity**: roda `agy --print "/usage"` — o seu próprio CLI, que se autentica sozinho. O app
+  não lê o token do Antigravity. Ver `Sources/AIQuotaCore/Antigravity/AntigravityUsageReader.swift`.
+- O e-mail aparece sempre mascarado (`r•••@g•••.com`).
 
-## Limites
+## Limites e estimativas
 
-- O **teto de custo usado para estimar o percentual quando não há limite oficial disponível
-  (padrão US$ 50 por bloco de 5h) é uma referência configurável, não um limite documentado pela
-  Anthropic** — ajuste em `QuotaConfig` conforme o seu plano real. Isso só é usado como último
-  recurso: quando não há limite oficial nem cache local nem resposta da rede.
-- O custo em si é uma **estimativa** calculada a partir da tabela de preços em
-  `Sources/AIQuotaCore/Pricing/ModelPricing.swift`, que precisa ser atualizada manualmente
-  se a Anthropic mudar os valores. Para modelos desconhecidos, o app usa o preço do Sonnet
-  como aproximação e sinaliza isso nos dados (`isEstimatedPricing`).
-- Os dados do **Cursor** e do **Antigravity** trazem apenas contagem (usos por modelo, ou
-  sessões) — essas fontes não expõem tokens nem custo (ver `docs/DATA-SOURCES.md`).
-- O **Antigravity** tem um `quota_manager` de verdade, mas ele só consulta a cota no servidor e
-  nunca grava o número em disco (o log registra só "starting reload"). Procurado também no
-  `storage.json`/`state.vscdb` da IDE e nos `.db` de conversa, sem resultado. Por isso o provedor
-  conta sessões do CLI, lidas do nome dos arquivos em `~/.gemini/antigravity-cli/log/`.
-- O **Codex** tem tokens completos (entrada/saída separados), mas **nunca tem custo em
-  dólar** — é assinatura, não paga por token. Quando a sessão local tem um `rate_limits`
-  oficial preenchido, o app mostra esse percentual em vez de estimar algo por conta própria.
-- O **Grok** não tem leitura implementada porque não há o que ler: `~/.grok` só guarda
-  configuração, sem nenhuma sessão ou histórico de uso local.
-- O endpoint ao vivo do Claude Code **não é documentado publicamente pela Anthropic** —
-  é o mesmo que o próprio CLI usa, mas o formato da resposta pode mudar sem aviso. O parse é
-  tolerante e qualquer falha cai de volta pro cache local e, por fim, pra estimativa por custo —
-  nunca trava o app.
-- Provedores **customizados** (via `providers.json`) dependem inteiramente do que você
-  configurar — se o CLI de terceiros mudar o formato dos logs, os caminhos configurados
-  param de bater e o provedor aparece como "sem dado de token" ou "não instalado", nunca
-  quebra o resto do app.
+- **Claude Code**: tokens completos. Quando não há limite oficial (endpoint e cache indisponíveis),
+  o percentual é estimado contra um teto de custo de referência (padrão US$ 50 por bloco de 5h,
+  ajustável em `QuotaConfig`) — não é um limite documentado pela Anthropic. O custo vem da tabela em
+  `Sources/AIQuotaCore/Pricing/ModelPricing.swift`, atualizada à mão; modelo desconhecido usa o
+  preço do Sonnet e é marcado como estimado.
+- **Antigravity**: cota semanal real do grupo Gemini, via `agy`. Não tem janela de sessão nem
+  tokens. Se o `agy` falhar (offline, deslogado), cai para a contagem de sessões do CLI.
+- **Codex**: tokens completos, mas sem custo em dólar (é assinatura). Usa o `rate_limits` oficial da
+  sessão local quando existe.
+- **Cursor**: só contagem de usos por modelo — a fonte não expõe tokens nem custo.
+- **Grok**: sem leitura, porque `~/.grok` só guarda configuração, sem histórico de uso.
+- O endpoint ao vivo do Claude Code e o `/usage` do Antigravity não são documentados publicamente;
+  o parse é tolerante e qualquer falha cai para o próximo recurso, sem travar o app.
+
+## Múltiplas contas
+
+Rodando mais de uma conta do Claude Code ou do Codex ao mesmo tempo (cada terminal com
+`CLAUDE_CONFIG_DIR`/`CODEX_HOME` apontando para uma pasta), o app detecta qualquer pasta em `$HOME`
+que comece com `.claude`/`.codex` e tenha o arquivo de conta, e mostra cada uma separada sob o
+mesmo provedor. É heurística; se uma segunda conta não aparecer, revise `MultiAccountDiscovery.swift`.
