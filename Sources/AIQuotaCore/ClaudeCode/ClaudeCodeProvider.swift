@@ -11,6 +11,9 @@ public struct ClaudeCodeProvider: QuotaProvider {
     private let reader: ClaudeCodeLogReader
     private let accountReader: ClaudeAccountReader
     private let credentialsFile: URL
+    /// Memória entre refreshes, usada só para detectar leitura defasada do endpoint na virada da
+    /// janela (ver `reconciledWithLocalUsage`). Injetável para os testes não tocarem o disco.
+    private let journal: UsageObservationJournal
     private let now: @Sendable () -> Date
 
     /// `id`/`displayName` têm outro valor só para uma segunda (terceira...) conta descoberta por
@@ -24,11 +27,13 @@ public struct ClaudeCodeProvider: QuotaProvider {
             .appendingPathComponent(".claude/.credentials.json"),
         id: String = "claude-code",
         displayName: String = "Claude Code",
+        journal: UsageObservationJournal = .shared,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.reader = reader
         self.accountReader = accountReader
         self.credentialsFile = credentialsFile
+        self.journal = journal
         self.now = now
         self.id = id
         self.displayName = displayName
@@ -42,40 +47,73 @@ public struct ClaudeCodeProvider: QuotaProvider {
             .capitalized
     }
 
-    /// Por quanto tempo, depois de uma janela de 5h virar, desconfiamos de um percentual alto
-    /// que os logs locais não confirmam. Curto de propósito: é só a defasagem do endpoint.
-    private static let rolloverGrace: TimeInterval = 15 * 60
-
-    /// Percentual a partir do qual o número precisa de confirmação nos logs locais.
-    private static let suspiciousPercent: Double = 10
-
-    /// Conserta o caso "a sessão resetou mas o painel continua em 100%": por alguns minutos
-    /// depois da virada, o `/oauth/usage` (e o cache do CLI) devolvem o percentual da janela
-    /// ANTERIOR já com o `resets_at` NOVO. Como o `resets_at` está no futuro, nada nos filtros
-    /// existentes pegava isso.
+    /// Decide, **sem relógio**, se um percentual oficial ainda descreve a janela anterior.
     ///
-    /// Cruzamos com os logs locais: a janela de 5h começa em `resets_at - 5h`; se ela virou há
-    /// pouco (`rolloverGrace`) e NENHUM token foi gasto nesta máquina desde então, um percentual
-    /// alto só pode ser resquício da janela velha — mostramos 0%, mantendo a hora de reset.
-    /// Fora dessa janelinha de carência o número oficial é sempre respeitado como veio.
+    /// O problema: na virada, o endpoint (e o cache do CLI) devolvem o `resets_at` NOVO junto com
+    /// o percentual VELHO — o painel fica travado em 100% numa janela que na verdade zerou. A
+    /// versão anterior disto chutava uma carência de 15 minutos, o que tinha dois defeitos: se o
+    /// endpoint demorasse 16 min, o painel pulava de 0% de volta pra 100%; e abrir o app 20 min
+    /// depois da virada mostrava o número velho como se fosse bom.
+    ///
+    /// Agora são três evidências, todas objetivas, e a desconfiança só existe com as TRÊS juntas:
+    ///
+    /// 1. **A janela virou**: o `resets_at` desta leitura é posterior ao da leitura anterior.
+    /// 2. **O número não mudou**: o percentual é idêntico ao último lido da janela anterior. Um
+    ///    valor legítimo praticamente nunca nasce igualzinho ao que fechou a janela passada.
+    /// 3. **Não há uso local nenhum na janela nova**: os logs desta máquina, dentro da janela
+    ///    real reconstruída do `resets_at`, estão vazios — e sem token gasto o percentual honesto
+    ///    é 0.
+    ///
+    /// A suspeita persiste (via `suspectResetsAt`/`suspectPercent` no jornal) enquanto o endpoint
+    /// repetir o mesmo número, sem prazo de validade, e **evapora sozinha** assim que ele publica
+    /// qualquer valor diferente ou assim que aparece uso local. Sem penhasco e sem flip-flop.
+    ///
+    /// A evidência 3 é também a proteção contra o falso positivo: quem usa a mesma conta em outra
+    /// máquina tem percentual alto com log local vazio — mas aí o número do endpoint *muda* entre
+    /// leituras, e a evidência 2 nunca fecha.
     static func reconciledWithLocalUsage(
         _ limits: [OfficialLimitInfo],
         events: [UsageEvent],
+        journal: UsageObservationJournal,
+        account: String,
         now: Date
     ) -> [OfficialLimitInfo] {
         limits.map { limit in
-            guard limit.label == "5h",
-                  limit.usedPercent >= suspiciousPercent,
-                  let resetsAt = limit.resetsAt else { return limit }
+            let previous = journal.observation(account: account, label: limit.label)
 
-            let windowStart = resetsAt.addingTimeInterval(-UsageWindowBuilder.windowDuration)
-            let sinceRollover = now.timeIntervalSince(windowStart)
-            guard sinceRollover >= 0, sinceRollover <= rolloverGrace else { return limit }
+            // (1) a janela virou desde a última leitura?
+            let rolledOver: Bool = {
+                guard let previousReset = previous?.lastResetsAt, let reset = limit.resetsAt else { return false }
+                return reset > previousReset
+            }()
+            // (2) o endpoint repetiu o número da janela anterior?
+            let frozen = rolledOver && previous?.lastPercent == limit.usedPercent
+            // ...ou já tínhamos flagrado esta mesma leitura como resquício num refresh anterior.
+            let stillFrozen = previous?.suspectResetsAt != nil
+                && previous?.suspectResetsAt == limit.resetsAt
+                && previous?.suspectPercent == limit.usedPercent
+            // (3) os logs locais confirmam que nada foi gasto na janela nova?
+            let noLocalUsage: Bool = {
+                guard let window = AuthoritativeWindow.window(for: limit) else { return false }
+                return AuthoritativeWindow.events(events, in: window).isEmpty
+            }()
 
-            let usedLocally = events.contains { $0.timestamp >= windowStart }
-            guard !usedLocally else { return limit }
+            let isStale = (frozen || stillFrozen) && noLocalUsage
 
-            return OfficialLimitInfo(label: limit.label, usedPercent: 0, resetsAt: resetsAt)
+            journal.record(
+                UsageObservationJournal.Observation(
+                    lastResetsAt: limit.resetsAt,
+                    lastPercent: limit.usedPercent,
+                    suspectResetsAt: isStale ? limit.resetsAt : nil,
+                    suspectPercent: isStale ? limit.usedPercent : nil
+                ),
+                account: account,
+                label: limit.label
+            )
+
+            guard isStale else { return limit }
+            // Sem nenhum token gasto na janela nova, 0% não é um chute: é o que os logs medem.
+            return OfficialLimitInfo(label: limit.label, usedPercent: 0, resetsAt: limit.resetsAt)
         }
     }
 
@@ -94,14 +132,46 @@ public struct ClaudeCodeProvider: QuotaProvider {
         }
 
         let events = reader.readAllEvents()
-        guard let block = FiveHourBlockBuilder.buildBlocks(from: events).last else {
+        guard !events.isEmpty else {
             return .unavailable(
                 providerId: id, displayName: displayName, isInstalled: true,
                 note: "Nenhum evento de uso encontrado em \(sourcePath)"
             )
         }
 
-        let byModel = block.eventsByModel.map { model, events -> ProviderModelUsage in
+        let account = accountReader.read()
+        // Ao vivo primeiro (bate certo com claude.ai mesmo se o CLI não roda há dias); o cache
+        // local de `~/.claude.json` (já filtrado por `ClaudeAccountReader` pra não mostrar janela
+        // expirada) só entra se a rede falhar — offline, sem token, endpoint fora do ar etc.
+        let officialLimits = Self.reconciledWithLocalUsage(
+            ClaudeLiveUsageReader.read(credentialsFile: credentialsFile, now: now())
+                ?? account?.officialLimits
+                ?? [],
+            events: events,
+            journal: journal,
+            account: id,
+            now: now()
+        )
+
+        // A janela REAL: reconstruída do `resets_at` oficial quando existe um, e só caindo pro
+        // bloco inferido dos logs quando não há nenhum. Isso é o que faz a contagem abaixo ser a
+        // da janela que a Anthropic conta, e não a de um bloco que começa no primeiro evento que
+        // por acaso foi registrado nesta máquina.
+        guard let resolved = AuthoritativeWindow.resolve(
+            officialLimits: officialLimits, events: events, now: now()
+        ) else {
+            return .unavailable(
+                providerId: id, displayName: displayName, isInstalled: true,
+                note: "Nenhum evento de uso encontrado em \(sourcePath)"
+            )
+        }
+        let window = resolved.window
+        // Contagem real: os eventos dos logs que caem dentro da janela real. Não passa pelo
+        // percentual do endpoint em momento nenhum, então a defasagem da virada não a afeta —
+        // numa janela recém-virada isto dá 0 token porque 0 token foi gasto, não por heurística.
+        let windowEvents = AuthoritativeWindow.events(events, in: window)
+
+        let byModel = Dictionary(grouping: windowEvents, by: \.model).map { model, events -> ProviderModelUsage in
             ProviderModelUsage(
                 model: model,
                 totalTokens: events.reduce(0) { $0 + $1.totalTokens },
@@ -112,21 +182,9 @@ public struct ClaudeCodeProvider: QuotaProvider {
         }.sorted { ($0.cost ?? 0) > ($1.cost ?? 0) }
 
         let hourlyUsage = UsageWindowBuilder.hourlyBuckets(
-            for: block.events,
-            window: UsageWindow(start: block.start),
+            for: windowEvents,
+            window: window,
             value: \.totalTokens
-        )
-
-        let account = accountReader.read()
-        // Ao vivo primeiro (bate certo com claude.ai mesmo se o CLI não roda há dias); o cache
-        // local de `~/.claude.json` (já filtrado por `ClaudeAccountReader` pra não mostrar janela
-        // expirada) só entra se a rede falhar — offline, sem token, endpoint fora do ar etc.
-        let officialLimits = Self.reconciledWithLocalUsage(
-            ClaudeLiveUsageReader.read(credentialsFile: credentialsFile)
-                ?? account?.officialLimits
-                ?? [],
-            events: events,
-            now: now()
         )
 
         return ProviderSnapshot(
@@ -134,12 +192,12 @@ public struct ClaudeCodeProvider: QuotaProvider {
             displayName: displayName,
             kind: .fullTokens,
             isInstalled: true,
-            windowStart: block.start,
-            windowEnd: block.end,
-            isActive: block.isActive(),
-            totalTokens: block.totalTokens,
-            totalCost: block.totalCost,
-            eventCount: block.events.count,
+            windowStart: window.start,
+            windowEnd: window.end,
+            isActive: window.isActive(now: now()),
+            totalTokens: windowEvents.reduce(0) { $0 + $1.totalTokens },
+            totalCost: CostCalculator.totalCost(for: windowEvents),
+            eventCount: windowEvents.count,
             byModel: byModel,
             officialLimits: officialLimits,
             note: nil,

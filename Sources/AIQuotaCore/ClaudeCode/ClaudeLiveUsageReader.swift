@@ -25,6 +25,12 @@ public enum ClaudeLiveUsageReader {
         func read(key: String, maxAge: TimeInterval, now: Date) -> [OfficialLimitInfo]?? {
             lock.lock(); defer { lock.unlock() }
             guard let entry = entries[key], now.timeIntervalSince(entry.fetchedAt) < maxAge else { return nil }
+            // Uma entrada dentro do TTL mas cuja janela já resetou descreve um mundo que não
+            // existe mais: servir isso era até 3 minutos de percentual de janela morta logo
+            // depois da virada — justamente quando o número mais engana. Vale a ida à rede.
+            if let limits = entry.limits, limits.contains(where: { ($0.resetsAt ?? .distantFuture) <= now }) {
+                return nil
+            }
             return .some(entry.limits)
         }
 
@@ -52,12 +58,12 @@ public enum ClaudeLiveUsageReader {
         if let cached = Cache.shared.read(key: cacheKey, maxAge: cacheTTL, now: now) {
             return cached
         }
-        let limits = fetchLive(credentialsFile: credentialsFile)
+        let limits = fetchLive(credentialsFile: credentialsFile, now: now)
         Cache.shared.store(limits, key: cacheKey, now: now)
         return limits
     }
 
-    private static func fetchLive(credentialsFile: URL) -> [OfficialLimitInfo]? {
+    private static func fetchLive(credentialsFile: URL, now: Date) -> [OfficialLimitInfo]? {
         guard let token = readToken(credentialsFile: credentialsFile) else { return nil }
         guard let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else { return nil }
 
@@ -80,13 +86,16 @@ public enum ClaudeLiveUsageReader {
         let sevenDay = get(["seven_day", "sevenDay", "weekly", "7d", "seven_day_all_models", "all_models"])
 
         let limits = [
-            fiveHour.flatMap { parseEntry($0, label: "5h") },
-            sevenDay.flatMap { parseEntry($0, label: "semanal") },
+            fiveHour.flatMap { parseEntry($0, label: "5h", now: now) },
+            sevenDay.flatMap { parseEntry($0, label: "semanal", now: now) },
         ].compactMap { $0 }
         return limits.isEmpty ? nil : limits
     }
 
-    private static func parseEntry(_ entry: [String: Any], label: String) -> OfficialLimitInfo? {
+    /// Espelha o descarte que `ClaudeAccountReader` já fazia no cache local e que aqui faltava:
+    /// entrada com `resets_at` no passado descreve uma janela que já zerou. Melhor a janela sumir
+    /// do painel até a próxima leitura boa do que mostrar cota "crítica" que na real resetou.
+    private static func parseEntry(_ entry: [String: Any], label: String, now: Date) -> OfficialLimitInfo? {
         let percent: Double? = ["utilization", "used_percent", "usedPercent", "percentage", "percent"]
             .lazy.compactMap { (entry[$0] as? NSNumber)?.doubleValue }.first
         guard let percent else { return nil }
@@ -94,6 +103,7 @@ public enum ClaudeLiveUsageReader {
         let normalized = percent <= 1 ? percent * 100 : percent
         let resetsAt = ["resets_at", "resetsAt", "reset_at", "resetAt"]
             .lazy.compactMap { (entry[$0] as? String).flatMap(ISO8601Parsing.date(from:)) }.first
+        if let resetsAt, resetsAt <= now { return nil }
         return OfficialLimitInfo(label: label, usedPercent: normalized, resetsAt: resetsAt)
     }
 
