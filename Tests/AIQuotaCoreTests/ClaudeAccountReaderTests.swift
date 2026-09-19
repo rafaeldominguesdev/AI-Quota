@@ -78,3 +78,56 @@ struct ClaudeAccountReaderTests {
         #expect(account?.officialLimits.isEmpty == true)
     }
 }
+
+@Suite("Virada da janela de 5h do Claude Code")
+struct ClaudeRolloverReconciliationTests {
+
+    private let now = utcDate(2026, 9, 19, 5, 0)
+
+    /// `resets_at` daqui a ~5h = janela que acabou de virar (começou 5 min atrás).
+    private var freshWindowReset: Date {
+        now.addingTimeInterval(UsageWindowBuilder.windowDuration - 5 * 60)
+    }
+
+    @Test("Janela recém-virada sem uso local: 100% do endpoint vira 0%")
+    func staleHighPercentRightAfterRolloverIsZeroed() {
+        let limits = [
+            OfficialLimitInfo(label: "5h", usedPercent: 100, resetsAt: freshWindowReset),
+            OfficialLimitInfo(label: "semanal", usedPercent: 48, resetsAt: now.addingTimeInterval(5 * 86400))
+        ]
+        // Uso local só na janela ANTERIOR (1h antes da virada).
+        let events = [makeEvent(timestamp: now.addingTimeInterval(-65 * 60))]
+
+        let result = ClaudeCodeProvider.reconciledWithLocalUsage(limits, events: events, now: now)
+
+        #expect(result[0].usedPercent == 0)
+        #expect(result[0].resetsAt == freshWindowReset) // a hora de reset continua valendo
+        #expect(result[1].usedPercent == 48) // a semanal nunca é mexida
+    }
+
+    @Test("Uso local depois da virada confirma o percentual: não mexemos nele")
+    func realUsageInTheNewWindowIsKept() {
+        let limits = [OfficialLimitInfo(label: "5h", usedPercent: 100, resetsAt: freshWindowReset)]
+        let events = [makeEvent(timestamp: now.addingTimeInterval(-60))]
+
+        let result = ClaudeCodeProvider.reconciledWithLocalUsage(limits, events: events, now: now)
+        #expect(result[0].usedPercent == 100)
+    }
+
+    @Test("Fora da carência da virada, o número oficial vale como veio")
+    func percentIsTrustedOutsideTheGracePeriod() {
+        // Janela começou 2h atrás: já passou muito da defasagem do endpoint.
+        let reset = now.addingTimeInterval(3 * 3600)
+        let limits = [OfficialLimitInfo(label: "5h", usedPercent: 100, resetsAt: reset)]
+
+        let result = ClaudeCodeProvider.reconciledWithLocalUsage(limits, events: [], now: now)
+        #expect(result[0].usedPercent == 100)
+    }
+
+    @Test("Percentual baixo não é tocado nem na virada")
+    func lowPercentIsNeverTouched() {
+        let limits = [OfficialLimitInfo(label: "5h", usedPercent: 2, resetsAt: freshWindowReset)]
+        let result = ClaudeCodeProvider.reconciledWithLocalUsage(limits, events: [], now: now)
+        #expect(result[0].usedPercent == 2)
+    }
+}

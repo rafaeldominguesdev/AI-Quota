@@ -11,6 +11,7 @@ public struct ClaudeCodeProvider: QuotaProvider {
     private let reader: ClaudeCodeLogReader
     private let accountReader: ClaudeAccountReader
     private let credentialsFile: URL
+    private let now: @Sendable () -> Date
 
     /// `id`/`displayName` têm outro valor só para uma segunda (terceira...) conta descoberta por
     /// `MultiAccountDiscovery` — a conta padrão continua "claude-code"/"Claude Code". Idem
@@ -22,11 +23,13 @@ public struct ClaudeCodeProvider: QuotaProvider {
         credentialsFile: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/.credentials.json"),
         id: String = "claude-code",
-        displayName: String = "Claude Code"
+        displayName: String = "Claude Code",
+        now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.reader = reader
         self.accountReader = accountReader
         self.credentialsFile = credentialsFile
+        self.now = now
         self.id = id
         self.displayName = displayName
     }
@@ -37,6 +40,43 @@ public struct ClaudeCodeProvider: QuotaProvider {
         return organizationType
             .dropFirst("claude_".count)
             .capitalized
+    }
+
+    /// Por quanto tempo, depois de uma janela de 5h virar, desconfiamos de um percentual alto
+    /// que os logs locais não confirmam. Curto de propósito: é só a defasagem do endpoint.
+    private static let rolloverGrace: TimeInterval = 15 * 60
+
+    /// Percentual a partir do qual o número precisa de confirmação nos logs locais.
+    private static let suspiciousPercent: Double = 10
+
+    /// Conserta o caso "a sessão resetou mas o painel continua em 100%": por alguns minutos
+    /// depois da virada, o `/oauth/usage` (e o cache do CLI) devolvem o percentual da janela
+    /// ANTERIOR já com o `resets_at` NOVO. Como o `resets_at` está no futuro, nada nos filtros
+    /// existentes pegava isso.
+    ///
+    /// Cruzamos com os logs locais: a janela de 5h começa em `resets_at - 5h`; se ela virou há
+    /// pouco (`rolloverGrace`) e NENHUM token foi gasto nesta máquina desde então, um percentual
+    /// alto só pode ser resquício da janela velha — mostramos 0%, mantendo a hora de reset.
+    /// Fora dessa janelinha de carência o número oficial é sempre respeitado como veio.
+    static func reconciledWithLocalUsage(
+        _ limits: [OfficialLimitInfo],
+        events: [UsageEvent],
+        now: Date
+    ) -> [OfficialLimitInfo] {
+        limits.map { limit in
+            guard limit.label == "5h",
+                  limit.usedPercent >= suspiciousPercent,
+                  let resetsAt = limit.resetsAt else { return limit }
+
+            let windowStart = resetsAt.addingTimeInterval(-UsageWindowBuilder.windowDuration)
+            let sinceRollover = now.timeIntervalSince(windowStart)
+            guard sinceRollover >= 0, sinceRollover <= rolloverGrace else { return limit }
+
+            let usedLocally = events.contains { $0.timestamp >= windowStart }
+            guard !usedLocally else { return limit }
+
+            return OfficialLimitInfo(label: limit.label, usedPercent: 0, resetsAt: resetsAt)
+        }
     }
 
     public var sourcePath: String { reader.projectsDirectory.path }
@@ -81,9 +121,13 @@ public struct ClaudeCodeProvider: QuotaProvider {
         // Ao vivo primeiro (bate certo com claude.ai mesmo se o CLI não roda há dias); o cache
         // local de `~/.claude.json` (já filtrado por `ClaudeAccountReader` pra não mostrar janela
         // expirada) só entra se a rede falhar — offline, sem token, endpoint fora do ar etc.
-        let officialLimits = ClaudeLiveUsageReader.read(credentialsFile: credentialsFile)
-            ?? account?.officialLimits
-            ?? []
+        let officialLimits = Self.reconciledWithLocalUsage(
+            ClaudeLiveUsageReader.read(credentialsFile: credentialsFile)
+                ?? account?.officialLimits
+                ?? [],
+            events: events,
+            now: now()
+        )
 
         return ProviderSnapshot(
             providerId: id,
