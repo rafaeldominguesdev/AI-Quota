@@ -73,6 +73,8 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <string>${VERSION}</string>
     <key>LSMinimumSystemVersion</key>
     <string>${MIN_MACOS}</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.developer-tools</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>
