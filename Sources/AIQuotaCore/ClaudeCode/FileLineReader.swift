@@ -9,8 +9,19 @@ final class FileLineReader {
     private let chunkSize = 256 * 1024
     private let newline: UInt8 = 0x0A
 
-    init?(path: String) {
+    /// `startingAtOffset` pula direto para um ponto do arquivo (usado para ler só o fim de
+    /// sessões enormes, quando só interessa o último evento gravado). Quem pula deve descartar a
+    /// primeira linha devolvida: ela quase sempre começa no meio de um JSON.
+    init?(path: String, startingAtOffset offset: UInt64 = 0) {
         guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        if offset > 0 {
+            do {
+                try handle.seek(toOffset: offset)
+            } catch {
+                try? handle.close()
+                return nil
+            }
+        }
         self.handle = handle
     }
 

@@ -13,14 +13,26 @@ public struct CodexProvider: QuotaProvider {
     private let sessionsDirectory: URL
     private let accountReader: CodexAccountReader
     private let recentWindow: TimeInterval
+    private let limitsWindow: TimeInterval
     private let now: @Sendable () -> Date
+
+    /// Quantos bytes do FIM de uma sessão antiga lemos só para achar o rate limit mais recente
+    /// dela, e quantas sessões antigas no máximo abrimos assim. Os dois números existem para o
+    /// custo do refresh de 30s ficar limitado (há rollouts de 70+ MB no disco).
+    private static let limitsTailBytes = 512 * 1024
+    private static let limitsFileLimit = 8
 
     /// `id`/`displayName` têm outro valor só para uma segunda (terceira...) conta descoberta por
     /// `MultiAccountDiscovery` — a conta padrão continua "codex"/"Codex".
     ///
-    /// `recentWindow` (padrão 24h): só o rate limit e a janela de uso mais recentes importam
-    /// aqui, então arquivos de sessão não tocados há mais tempo que isso nem são abertos — sem
-    /// isto, cada refresh de 30s reprocessava centenas de MB de sessões antigas à toa.
+    /// `recentWindow` (padrão 24h): a soma de tokens só olha a janela de uso corrente, então
+    /// arquivos de sessão não tocados há mais tempo que isso nem são abertos — sem isto, cada
+    /// refresh de 30s reprocessava centenas de MB de sessões antigas à toa.
+    ///
+    /// `limitsWindow` (padrão 8 dias) é MAIOR de propósito: a cota semanal que o Codex reporta
+    /// continua valendo dias depois do último uso, e antes disto quem passava um dia sem rodar o
+    /// Codex via o provedor sumir inteiro do painel (nenhuma janela de cota → filtrado pela UI).
+    /// Dessas sessões mais velhas lemos só o fim do arquivo, atrás do último rate limit.
     public init(
         sessionsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex/sessions"),
@@ -28,6 +40,7 @@ public struct CodexProvider: QuotaProvider {
         id: String = "codex",
         displayName: String = "Codex",
         recentWindow: TimeInterval = 24 * 3600,
+        limitsWindow: TimeInterval = 8 * 24 * 3600,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.sessionsDirectory = sessionsDirectory
@@ -35,6 +48,7 @@ public struct CodexProvider: QuotaProvider {
         self.id = id
         self.displayName = displayName
         self.recentWindow = recentWindow
+        self.limitsWindow = limitsWindow
         self.now = now
     }
 
@@ -52,19 +66,13 @@ public struct CodexProvider: QuotaProvider {
             )
         }
 
-        let files = findSessionFiles()
-        guard !files.isEmpty else {
-            return .unavailable(
-                providerId: id, displayName: displayName, isInstalled: true,
-                note: "Nenhuma sessão encontrada em \(sourcePath)"
-            )
-        }
+        let recentFiles = sessionFiles(modifiedAfter: now().addingTimeInterval(-recentWindow))
 
         var allEvents: [CodexTokenEvent] = []
         var latestModel: (timestamp: Date, model: String)?
         var latestRateLimits: (timestamp: Date, limits: CodexRateLimitsPayload)?
 
-        for file in files {
+        for file in recentFiles {
             let parsed = CodexSessionParser.parseFile(at: file)
             allEvents.append(contentsOf: parsed.events)
             if let candidate = parsed.latestModel,
@@ -77,17 +85,66 @@ public struct CodexProvider: QuotaProvider {
             }
         }
 
+        // Sem uso nas últimas 24h ainda há cota a mostrar: a semanal do Codex reseta em 7 dias.
+        // Aí vamos às sessões mais antigas, lendo só o fim de cada arquivo.
+        if latestRateLimits == nil {
+            for file in olderSessionFilesNewestFirst(excluding: recentFiles) {
+                guard let candidate = CodexSessionParser.latestRateLimits(
+                    at: file, tailBytes: Self.limitsTailBytes
+                ) else { continue }
+                if latestRateLimits == nil || candidate.timestamp > latestRateLimits!.timestamp {
+                    latestRateLimits = candidate
+                }
+            }
+        }
+
+        // Uma janela cujo `resets_at` já passou zerou de verdade: como o rate limit que lemos é o
+        // último que o Codex gravou, se ele está vencido é porque não houve NENHUM uso depois do
+        // reset — ou seja, a janela nova está em 0%. Mostramos a linha em 0% (sem hora de reset:
+        // a janela de 5h do Codex só começa a contar no próximo uso, então não há data a prever)
+        // em vez de esconder a janela, que era o que fazia o limite de sessão desaparecer.
+        let officialLimits = (latestRateLimits.map { Self.officialLimits(from: $0.limits) } ?? [])
+            .map { limit -> OfficialLimitInfo in
+                guard let resetsAt = limit.resetsAt, resetsAt <= now() else { return limit }
+                return OfficialLimitInfo(label: limit.label, usedPercent: 0, resetsAt: nil)
+            }
+        let planLabel = latestRateLimits?.limits.plan_type
+        let accountEmail = accountReader.read()?.email
+
         guard let last = UsageWindowBuilder.windows(for: allEvents).last else {
-            return .unavailable(
-                providerId: id, displayName: displayName, isInstalled: true,
-                note: "Nenhum evento de token_count encontrado em \(sourcePath)"
+            guard !officialLimits.isEmpty else {
+                return .unavailable(
+                    providerId: id, displayName: displayName, isInstalled: true,
+                    note: recentFiles.isEmpty
+                        ? "Nenhuma sessão recente em \(sourcePath) e nenhum rate limit válido nas sessões anteriores."
+                        : "Nenhum evento de token_count encontrado em \(sourcePath)"
+                )
+            }
+            // Cota oficial válida, mas nenhuma sessão na janela de uso: mostra as barras de cota
+            // sem inventar tokens.
+            return ProviderSnapshot(
+                providerId: id,
+                displayName: displayName,
+                kind: .fullTokens,
+                isInstalled: true,
+                windowStart: nil,
+                windowEnd: nil,
+                isActive: false,
+                totalTokens: 0,
+                totalCost: nil,
+                eventCount: 0,
+                byModel: [],
+                officialLimits: officialLimits,
+                note: "Sem sessões do Codex nas últimas 24h; mostrando os limites oficiais que ele reportou por último.",
+                hourlyUsage: [],
+                planLabel: planLabel,
+                accountEmail: accountEmail
             )
         }
 
         let windowEvents = last.events
         let totalTokens = windowEvents.reduce(0) { $0 + $1.totalTokens }
         let modelName = latestModel?.model ?? "desconhecido"
-        let officialLimits = latestRateLimits.map { Self.officialLimits(from: $0.limits) } ?? []
         let hourlyUsage = UsageWindowBuilder.hourlyBuckets(
             for: windowEvents,
             window: last.window,
@@ -121,12 +178,30 @@ public struct CodexProvider: QuotaProvider {
                 ? "Nenhum rate limit oficial encontrado nas sessões locais; mostrando apenas tokens somados."
                 : nil,
             hourlyUsage: hourlyUsage,
-            planLabel: latestRateLimits?.limits.plan_type,
-            accountEmail: accountReader.read()?.email
+            planLabel: planLabel,
+            accountEmail: accountEmail
         )
     }
 
-    private func findSessionFiles() -> [URL] {
+    /// Sessões modificadas depois de `cutoff`. O filtro por mtime é o que evita reabrir centenas
+    /// de MB de rollouts antigos a cada refresh.
+    private func sessionFiles(modifiedAfter cutoff: Date) -> [URL] {
+        sessionFilesWithDates().filter { $0.modified >= cutoff }.map(\.url)
+    }
+
+    /// As sessões da `limitsWindow` que NÃO estão em `recent`, da mais recente para a mais antiga
+    /// e no máximo `limitsFileLimit` — candidatas a ter o último rate limit reportado.
+    private func olderSessionFilesNewestFirst(excluding recent: [URL]) -> [URL] {
+        let recentPaths = Set(recent.map(\.path))
+        let cutoff = now().addingTimeInterval(-limitsWindow)
+        return sessionFilesWithDates()
+            .filter { $0.modified >= cutoff && !recentPaths.contains($0.url.path) }
+            .sorted { $0.modified > $1.modified }
+            .prefix(Self.limitsFileLimit)
+            .map(\.url)
+    }
+
+    private func sessionFilesWithDates() -> [(url: URL, modified: Date)] {
         guard let enumerator = FileManager.default.enumerator(
             at: sessionsDirectory,
             includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
@@ -134,12 +209,11 @@ public struct CodexProvider: QuotaProvider {
         ) else {
             return []
         }
-        let cutoff = now().addingTimeInterval(-recentWindow)
-        var files: [URL] = []
+        var files: [(url: URL, modified: Date)] = []
         for case let url as URL in enumerator where url.pathExtension == "jsonl" {
-            let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-            if let modified, modified < cutoff { continue }
-            files.append(url)
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? .distantPast
+            files.append((url, modified))
         }
         return files
     }

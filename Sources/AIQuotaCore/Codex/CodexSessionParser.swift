@@ -31,6 +31,30 @@ enum CodexSessionParser {
         return session
     }
 
+    /// Lê SÓ o fim do arquivo (últimos `tailBytes`) procurando o rate limit mais recente que ele
+    /// gravou. Serve para sessões antigas/gigantes (há rollouts de 70+ MB no disco): a cota
+    /// semanal do Codex continua valendo dias depois do último uso, então precisamos desse dado
+    /// mesmo de um arquivo que não vale a pena varrer inteiro a cada refresh.
+    static func latestRateLimits(at url: URL, tailBytes: Int) -> (timestamp: Date, limits: CodexRateLimitsPayload)? {
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        let offset = UInt64(max(0, size - tailBytes))
+        guard let reader = FileLineReader(path: url.path, startingAtOffset: offset) else { return nil }
+        defer { reader.close() }
+
+        // A primeira linha depois de um salto começa no meio de um JSON — descarta.
+        if offset > 0 { _ = reader.nextLine() }
+
+        var latest: (timestamp: Date, limits: CodexRateLimitsPayload)?
+        while let line = reader.nextLine() {
+            guard !line.isEmpty else { continue }
+            if let (timestamp, limits) = decodeRateLimits(fromLine: line),
+               latest == nil || timestamp > latest!.timestamp {
+                latest = (timestamp, limits)
+            }
+        }
+        return latest
+    }
+
     /// Decodes an `event_msg` / `token_count` line into a per-turn usage delta, taken from
     /// `last_token_usage` (never `total_token_usage` — see `CodexSessionLine.swift`).
     static func decodeTokenEvent(fromLine line: String) -> CodexTokenEvent? {

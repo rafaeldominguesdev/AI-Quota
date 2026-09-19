@@ -102,4 +102,66 @@ struct CodexProviderTests {
         #expect(CodexSessionParser.decodeTokenEvent(fromLine: line) == nil)
         #expect(CodexSessionParser.decodeModel(fromLine: line) == nil)
     }
+
+    /// O caso que fazia o Codex desaparecer do painel: um dia sem rodar o CLI, então nenhuma
+    /// sessão dentro da janela de uso — mas a cota SEMANAL reportada segue valendo, e é ela que
+    /// tem de aparecer (antes o provider voltava `unavailable` e a UI filtrava a linha fora).
+    @Test("Sessão mais velha que a janela de uso ainda entrega o limite semanal")
+    func staleSessionStillReportsWeeklyLimit() throws {
+        let now = Date(timeIntervalSince1970: 1_790_000_000)
+        let sessionTimestamp = "2026-09-18T04:38:13.893Z"
+        let weeklyReset = Int(now.timeIntervalSince1970) + 2 * 24 * 3600
+        let expiredFiveHourReset = Int(now.timeIntervalSince1970) - 3600
+
+        let line = """
+        {"timestamp":"\(sessionTimestamp)","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"codex","primary":{"used_percent":12.0,"window_minutes":300,"resets_at":\(expiredFiveHourReset)},"secondary":{"used_percent":75.0,"window_minutes":10080,"resets_at":\(weeklyReset)},"plan_type":"plus"}}}
+        """
+
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("codex-stale-\(UUID().uuidString)")
+        let sessions = root.appendingPathComponent("sessions/2026/09/18")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let file = sessions.appendingPathComponent("rollout.jsonl")
+        try line.write(to: file, atomically: true, encoding: .utf8)
+        // Tocado há 3 dias: fora da janela de uso (24h), dentro da janela de limites (8 dias).
+        try FileManager.default.setAttributes(
+            [.modificationDate: now.addingTimeInterval(-3 * 24 * 3600)],
+            ofItemAtPath: file.path
+        )
+
+        let provider = CodexProvider(
+            sessionsDirectory: root.appendingPathComponent("sessions"),
+            now: { now }
+        )
+        let snapshot = try provider.snapshot(config: .defaultConfig)
+
+        #expect(snapshot.kind == .fullTokens)
+        #expect(snapshot.planLabel == "plus")
+        // As duas janelas aparecem. A de 5h já resetou sem uso novo depois, então vira 0% e sem
+        // hora de reset (só volta a contar no próximo uso); a semanal segue no valor reportado.
+        #expect(snapshot.officialLimits.count == 2)
+        #expect(snapshot.officialLimits[0].label == "5h")
+        #expect(snapshot.officialLimits[0].usedPercent == 0)
+        #expect(snapshot.officialLimits[0].resetsAt == nil)
+        #expect(snapshot.officialLimits[1].label == "semanal")
+        #expect(snapshot.officialLimits[1].usedPercent == 75.0)
+        #expect(snapshot.totalTokens == 0)
+    }
+
+    @Test("Sem nenhuma sessão na janela de limites, o Codex volta indisponível")
+    func noSessionsAtAllIsUnavailable() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("codex-empty-\(UUID().uuidString)")
+        let sessions = root.appendingPathComponent("sessions")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let provider = CodexProvider(sessionsDirectory: sessions)
+        let snapshot = try provider.snapshot(config: .defaultConfig)
+
+        #expect(snapshot.kind == .unavailable)
+        #expect(snapshot.officialLimits.isEmpty)
+    }
 }

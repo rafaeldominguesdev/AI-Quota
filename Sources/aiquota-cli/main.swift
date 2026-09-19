@@ -84,7 +84,10 @@ func printProviderBlock(_ provider: ProviderSnapshot) {
         return
     }
 
+    // Sem janela de uso ainda pode haver cota oficial válida (Codex semanal, dias depois do
+    // último uso), e é ela que importa — então imprime os limites antes de desistir.
     guard let start = provider.windowStart, let end = provider.windowEnd else {
+        printOfficialLimits(provider.officialLimits)
         if let note = provider.note { print(note) }
         return
     }
@@ -105,13 +108,7 @@ func printProviderBlock(_ provider: ProviderSnapshot) {
         break
     }
 
-    for officialLimit in provider.officialLimits {
-        var line = "Limite oficial: \(Formatting.percent(officialLimit.usedPercent)) usado (\(officialLimit.label))"
-        if let resetsAt = officialLimit.resetsAt {
-            line += " — reseta \(Formatting.date(resetsAt))"
-        }
-        print(line)
-    }
+    printOfficialLimits(provider.officialLimits)
 
     if !provider.byModel.isEmpty {
         print("Por modelo:")
@@ -132,5 +129,15 @@ func printProviderBlock(_ provider: ProviderSnapshot) {
 
     if let note = provider.note {
         print(note)
+    }
+}
+
+func printOfficialLimits(_ limits: [OfficialLimitInfo]) {
+    for officialLimit in limits {
+        var line = "Limite oficial: \(Formatting.percent(officialLimit.usedPercent)) usado (\(officialLimit.label))"
+        if let resetsAt = officialLimit.resetsAt {
+            line += " — reseta \(Formatting.date(resetsAt))"
+        }
+        print(line)
     }
 }
