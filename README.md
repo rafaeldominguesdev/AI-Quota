@@ -1,7 +1,7 @@
 # AI Quota
 
 App de barra de menu do macOS que mostra, por IA que você usa (Claude Code, Codex, Cursor,
-Gemini, Grok e qualquer CLI customizado), quanto já foi consumido da janela de uso atual e
+Antigravity, Grok e qualquer CLI customizado), quanto já foi consumido da janela de uso atual e
 quando ela reseta — direto na barra de menu, sem abrir terminal nem entrar no site de cada uma.
 
 Tudo roda localmente: o app lê os logs/config que cada CLI já grava no seu disco. A única exceção
@@ -165,8 +165,12 @@ O app procura a imagem nesta ordem:
   `Sources/AIQuotaCore/Pricing/ModelPricing.swift`, que precisa ser atualizada manualmente
   se a Anthropic mudar os valores. Para modelos desconhecidos, o app usa o preço do Sonnet
   como aproximação e sinaliza isso nos dados (`isEstimatedPricing`).
-- Os dados do **Cursor** e do **Gemini** trazem apenas contagem (usos por modelo, ou
-  interações) — essas fontes não expõem tokens nem custo (ver `docs/DATA-SOURCES.md`).
+- Os dados do **Cursor** e do **Antigravity** trazem apenas contagem (usos por modelo, ou
+  sessões) — essas fontes não expõem tokens nem custo (ver `docs/DATA-SOURCES.md`).
+- O **Antigravity** tem um `quota_manager` de verdade, mas ele só consulta a cota no servidor e
+  nunca grava o número em disco (o log registra só "starting reload"). Procurado também no
+  `storage.json`/`state.vscdb` da IDE e nos `.db` de conversa, sem resultado. Por isso o provedor
+  conta sessões do CLI, lidas do nome dos arquivos em `~/.gemini/antigravity-cli/log/`.
 - O **Codex** tem tokens completos (entrada/saída separados), mas **nunca tem custo em
   dólar** — é assinatura, não paga por token. Quando a sessão local tem um `rate_limits`
   oficial preenchido, o app mostra esse percentual em vez de estimar algo por conta própria.

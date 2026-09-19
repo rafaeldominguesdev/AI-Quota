@@ -19,15 +19,15 @@ enum ProviderLogo {
     private static let searchedExtensions = ["png", "svg", "webp", "jpg", "jpeg"]
 
     /// Nome do recurso embutido de cada provedor. Só existe para as marcas que o app carrega;
-    /// Gemini e Cursor não têm logo aqui de propósito — caem no glifo desenhado.
-    private static let bundledResources: [String: String] = [
+        private static let bundledResources: [String: String] = [
         "claude-code": "claude-code.svg",
         "codex": "codex.svg",
         "grok": "grok.png",
+        "cursor": "cursor.png",
         // Disponíveis para quem adicionar esses provedores pelo providers.json.
         "deepseek": "deepseek.jpg",
         "meta": "meta.png",
-        "antigravity": "antigravity.jpeg"
+        "antigravity": "antigravity.png"
     ]
 
     /// `nil` quando não há imagem para o provedor e a UI deve desenhar o glifo.
@@ -113,16 +113,13 @@ struct ProviderLogoView: View {
 
     var body: some View {
         if let image = ProviderLogo.image(for: providerId) {
+            // Só o ícone: sem quadrado nem borda em volta, e `.fit` para não cortar nada. `.high`
+            // mantém a marca nítida ao ampliar (as fontes têm de 200 a 1200 px).
             Image(nsImage: image)
                 .resizable()
                 .interpolation(.high)
-                .aspectRatio(contentMode: .fill)
+                .aspectRatio(contentMode: .fit)
                 .frame(width: side, height: side)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.logo, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.logo, style: .continuous)
-                        .strokeBorder(Theme.line, lineWidth: Theme.Metric.border)
-                )
         } else {
             ProviderGlyphView(
                 glyph: ProviderGlyph.forProvider(id: providerId),

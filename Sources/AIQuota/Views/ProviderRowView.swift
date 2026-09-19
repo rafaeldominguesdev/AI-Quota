@@ -69,10 +69,6 @@ struct ProviderRowView: View {
                 .truncationMode(.middle)
 
             Spacer(minLength: 4)
-
-            if let letter = presentation.planBadgeLetter {
-                PlanBadgeSquare(letter: letter)
-            }
         }
         .padding(.leading, Theme.Metric.windowIndent)
     }
@@ -178,7 +174,8 @@ struct ProviderGroupHeaderView: View {
 
             ProviderLogoView(
                 providerId: group.id,
-                glyphColor: isDim ? Theme.inkFaint : Theme.inkDim
+                glyphColor: isDim ? Theme.inkFaint : Theme.inkDim,
+                side: 16
             )
 
             Text(group.displayName)
@@ -190,7 +187,32 @@ struct ProviderGroupHeaderView: View {
                 .truncationMode(.tail)
 
             Spacer(minLength: 6)
+
+            // O selo da tecla que abre a página desta IA no navegador. Só aparece para quem tem
+            // página conhecida — provedor customizado não ganha tecla inventada.
+            if let key = ProviderWebConsole.keyLabel(forProviderId: group.id) {
+                KeyCap(letter: key, isDim: isDim)
+            }
         }
         .padding(.top, 10)
+    }
+}
+
+/// O selinho de tecla ("C", "X"...) ao lado do nome da IA: moldura hairline e a letra dentro, do
+/// jeito que uma tecla é escrita num manual. É só um rótulo — quem escuta a tecla de verdade é o
+/// `providerShortcuts` do painel.
+struct KeyCap: View {
+    let letter: String
+    var isDim: Bool = false
+
+    var body: some View {
+        Text(letter)
+            .font(Theme.mono(Theme.Size.micro, .bold))
+            .foregroundStyle(isDim ? Theme.inkFaint : Theme.inkDim)
+            .frame(width: 13, height: 13)
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(isDim ? Theme.line : Theme.lineStrong, lineWidth: Theme.Metric.border)
+            )
     }
 }

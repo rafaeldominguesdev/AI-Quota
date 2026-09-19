@@ -15,7 +15,7 @@ struct ProviderGroup: Identifiable {
 
 enum ProviderGrouping {
     /// "claude-code-work" → "claude-code", "codex-personal" → "codex", qualquer outro id fica
-    /// como está (gemini/grok/cursor/custom não têm múltiplas contas hoje).
+    /// como está (antigravity/grok/cursor/custom não têm múltiplas contas hoje).
     private static func family(of id: String) -> String {
         if id.hasPrefix("claude") { return "claude-code" }
         if id.hasPrefix("codex") { return "codex" }

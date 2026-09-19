@@ -4,11 +4,17 @@ import AIQuotaCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Referência fraca para o delegate ativo, para o painel SwiftUI conseguir fechar o popover
+    /// quando um atalho abre o navegador — sem ela a view teria que caçar a janela do popover
+    /// pelo nome da classe, que quebra a cada versão do macOS.
+    private(set) static weak var shared: AppDelegate?
+
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private let store = QuotaStore()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppDelegate.shared = self
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             button.imagePosition = .imageLeading
@@ -29,6 +35,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // BLOCO TEMPORARIO DE VERIFICACAO VISUAL - REMOVER ANTES DO COMMIT
     private func installTemporaryVisualCheckHook() {
+        // Abre a janela de Ajustes de verdade, para conferir com `screencapture` o que o
+        // `ImageRenderer` não consegue desenhar (o conteúdo de um ScrollView sai em branco).
+        if ProcessInfo.processInfo.environment["AIQUOTA_SELFTEST_WINDOW"] == "1" {
+            Task { @MainActor in
+                for _ in 0..<120 where self.store.overview == nil {
+                    try? await Task.sleep(for: .seconds(1))
+                }
+                SettingsWindowController.shared.show(store: self.store)
+            }
+            return
+        }
         guard ProcessInfo.processInfo.environment["AIQUOTA_SELFTEST"] == "1" else { return }
         Task { @MainActor in
             for _ in 0..<120 where self.store.overview == nil {
@@ -54,7 +71,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             shoot(PopoverRootView(store: self.store), "painel.png")
-            shoot(ProvidersScreenView(store: self.store, onBack: {}).frame(width: Theme.Metric.panelWidth), "provedores.png")
+            shoot(
+                HStack(spacing: 18) {
+                    ForEach([16, 22, 32, 64, 128], id: \.self) { side in
+                        AIQuotaMark(side: CGFloat(side))
+                    }
+                }
+                .padding(20),
+                "marca.png"
+            )
+            shoot(SettingsWindowView(store: self.store), "ajustes.png")
+            for tab in SettingsWindowView.Tab.allCases {
+                shoot(
+                    SettingsTabContent(
+                        store: self.store, tab: tab, isLoginItemEnabled: false, toggleLoginItem: {}
+                    )
+                    .frame(width: Theme.Metric.Settings.width),
+                    "ajustes-\(tab.rawValue.lowercased()).png"
+                )
+            }
 
             // A imagem da barra de menu na escala REAL da Retina (2x) e com zoom sem
             // interpolacao, para julgar nitidez da logo a 12pt.
@@ -92,7 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             // Quais logos resolveram de verdade NESTE processo — é o que prova que o
             // Bundle.module funciona dentro do .app empacotado.
-            let ids = ["claude-code", "codex", "grok", "gemini", "cursor", "deepseek"]
+            let ids = ["claude-code", "codex", "grok", "antigravity", "cursor", "deepseek"]
             let resolved = ids.map { id -> String in
                 if let image = ProviderLogo.image(for: id) {
                     return "\(id)=\(Int(image.size.width))x\(Int(image.size.height))"
@@ -109,6 +144,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             """
             try? report.write(to: URL(fileURLWithPath: dir + "/report.txt"), atomically: true, encoding: .utf8)
         }
+    }
+
+    /// Fecha o painel, se estiver aberto. Usado pelos atalhos de provedor: depois de mandar o
+    /// navegador para a frente, deixar o popover aberto atrás só atrapalha.
+    func closePopover() {
+        popover?.performClose(nil)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -168,12 +209,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// e um traço fino separando uma IA da próxima. O percentual de cada barra é o do limite
     /// OFICIAL quando o provedor reporta um (dado medido), e só então a nossa estimativa por
     /// custo.
+    /// Ordem fixa da barra de menu, a pedido do usuário: Claude, Codex e Antigravity primeiro e
+    /// sempre nessa sequência; qualquer outra IA conectada (Cursor, Grok, customizada) vem depois,
+    /// à direita do Antigravity, preservando a ordem em que já vinham. `enumerated` mantém o
+    /// desempate estável (o `sorted` do Swift não garante estabilidade sozinho).
+    static func menuBarOrder(_ providers: [ProviderPresentation]) -> [ProviderPresentation] {
+        func priority(_ id: String) -> Int {
+            if id.hasPrefix("claude") { return 0 }
+            if id.hasPrefix("codex") { return 1 }
+            if id.hasPrefix("antigravity") { return 2 }
+            return 3
+        }
+        return providers.enumerated()
+            .sorted { a, b in
+                let pa = priority(a.element.id), pb = priority(b.element.id)
+                return pa != pb ? pa < pb : a.offset < b.offset
+            }
+            .map(\.element)
+    }
+
     private func updateStatusItem() {
         guard let button = statusItem?.button else { return }
 
         // Sem rótulo de tempo aqui de propósito: a barra de menu mostra só o gasto (a
         // barrinha); o tempo até resetar fica pro painel, que abre com um clique.
-        let groups = store.connectedProviders.map { presentation -> MenuBarIndicator.Group in
+        let groups = Self.menuBarOrder(store.connectedProviders).map { presentation -> MenuBarIndicator.Group in
             let windows = presentation.windows.map { window in
                 MenuBarIndicator.Window(
                     fraction: window.percent / 100,

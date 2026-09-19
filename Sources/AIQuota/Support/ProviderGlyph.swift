@@ -20,7 +20,7 @@ enum ProviderGlyph {
         switch id {
         case "claude-code": return .sunburst
         case "codex": return .hexagon
-        case "gemini": return .fourPointStar
+        case "antigravity": return .fourPointStar
         case "grok": return .cross
         case "cursor": return .cube
         default: return .circle

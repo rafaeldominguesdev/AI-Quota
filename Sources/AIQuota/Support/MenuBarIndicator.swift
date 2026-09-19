@@ -125,6 +125,23 @@ enum MenuBarIndicator {
         return image
     }
 
+    /// Encolhe um pouco a marca de alguns provedores na barra de menu. O Antigravity é o caso:
+    /// o "A" ocupa muita largura e pedia menos presença ao lado das outras.
+    private static func logoScale(for providerId: String) -> CGFloat {
+        providerId.hasPrefix("antigravity") ? 0.8 : 1
+    }
+
+    /// Encaixa a imagem no slot preservando a proporção (aspect-fit), aplicando `scale` e
+    /// centralizando — sem espremer um logotipo retangular num quadrado.
+    private static func logoDrawRect(_ image: NSImage, in slot: NSRect, scale: CGFloat) -> NSRect {
+        let box = slot.insetBy(dx: slot.width * (1 - scale) / 2, dy: slot.height * (1 - scale) / 2)
+        let size = image.size
+        guard size.width > 0, size.height > 0 else { return box }
+        let ratio = min(box.width / size.width, box.height / size.height)
+        let w = size.width * ratio, h = size.height * ratio
+        return NSRect(x: box.midX - w / 2, y: box.midY - h / 2, width: w, height: h)
+    }
+
     private static func drawDivider(at x: CGFloat, bounds: NSRect) {
         let height = logoSide - 2
         let rect = NSRect(x: x, y: bounds.midY - height / 2, width: dividerWidth, height: height)
@@ -147,17 +164,12 @@ enum MenuBarIndicator {
         )
 
         if let logo {
-            // Mesmo recorte do painel: quadrado de canto arredondado, para um logotipo com
-            // fundo próprio não brigar com a barra de menu.
             NSGraphicsContext.saveGraphicsState()
-            let clip = NSBezierPath(
-                roundedRect: glyphRect,
-                xRadius: logoCornerRadius,
-                yRadius: logoCornerRadius
-            )
-            clip.addClip()
             NSGraphicsContext.current?.imageInterpolation = .high
-            logo.draw(in: glyphRect)
+            // Desenha respeitando a proporção da imagem, centralizado no slot, com um ajuste de
+            // escala por provedor. O "A" do Antigravity é bem mais largo que alto — esticá-lo num
+            // quadrado o fazia parecer grande demais; aqui ele entra menor e sem distorção.
+            logo.draw(in: logoDrawRect(logo, in: glyphRect, scale: logoScale(for: group.providerId)))
             NSGraphicsContext.restoreGraphicsState()
         } else {
             let fallbackColor = group.windows.first?.color ?? Theme.NS.inkFaint
