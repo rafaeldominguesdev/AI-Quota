@@ -4,69 +4,78 @@ import SwiftUI
 /// Único lugar do app onde valores visuais brutos existem. Todo o resto das views referencia
 /// constantes nomeadas daqui — nenhum hexadecimal solto espalhado pela interface.
 ///
-/// Paleta do print de referência do usuário (dashboard de terminal minimalista): fundo quase
-/// preto, texto claro, marcador rosa por provedor, semáforo verde/vermelho/âmbar nas barras de
-/// cota. Câmbio de digitos: DevTerm/PilotDeck deram a estrutura (mono, caixa alta, densidade);
-/// esta paleta é a pele definitiva pedida por cima disso.
+/// Pele REDLINE (print de referência do usuário, set/2026): preto absoluto, hairline fria
+/// `#1F2937`, acento vermelho `#EF4444` e semáforo Tailwind nas barras de cota. DevTerm/PilotDeck
+/// deram a ESTRUTURA que continua de pé (mono em tudo, caixa alta com tracking, densidade); o que
+/// esta paleta substitui é só a pele cinza-azulada do PilotDeck.
+///
+/// Os tons vêm da escala Tailwind, como no print: gray-800 `#1F2937` para linha e trilho,
+/// gray-600 `#4B5563` para borda de botão fantasma, gray-400 `#9CA3AF` para texto secundário,
+/// red-500 `#EF4444` como acento, green-500/yellow-500/red-500 no semáforo.
 enum Theme {
 
     // MARK: - Cores (paleta do print de referência)
 
-    /// Fundo (canvas).
-    static let bg = Color(hex: 0x101214)
-    /// Superfície um degrau acima do fundo.
-    static let surface = Color(hex: 0x16191C)
+    /// Fundo (canvas) — preto absoluto, como no print.
+    static let bg = Color(hex: 0x000000)
+    /// Superfície de card: um degrau mínimo acima do preto, o suficiente para a borda fazer o
+    /// trabalho de desenhar a caixa sem o card "acender".
+    static let surface = Color(hex: 0x0A0A0A)
 
     /// Texto primário.
-    static let ink = Color(hex: 0xE2E2E2)
-    /// Texto secundário.
-    static let inkDim = Color(hex: 0x92979D)
-    /// Um passo abaixo do secundário, para texto de apoio que não deve competir.
-    static let inkMuted = Color(hex: 0x7A8087)
-    /// Texto apagado: provedor sem dado, caminhos de arquivo, traços de ausência.
-    static let inkFaint = Color(hex: 0x565C63)
+    static let ink = Color(hex: 0xFFFFFF)
+    /// Texto secundário (gray-400).
+    static let inkDim = Color(hex: 0x9CA3AF)
+    /// Um passo abaixo do secundário, para texto de apoio que não deve competir (gray-500).
+    static let inkMuted = Color(hex: 0x6B7280)
+    /// Texto apagado: provedor sem dado, caminhos de arquivo, traços de ausência (gray-600).
+    static let inkFaint = Color(hex: 0x4B5563)
 
-    /// Cinza muito claro, quase branco. É acento por LUMINÂNCIA, não por cor.
-    static let accent = Color(hex: 0xD7DBDF)
+    /// O acento da marca: vermelho REDLINE. Usado na segunda palavra da assinatura e no botão
+    /// primário — e em mais nada, para continuar valendo como acento.
+    static let accent = Color(hex: 0xEF4444)
     /// Cinza médio de foco/realce.
-    static let focus = Color(hex: 0x9AA3AD)
-    /// Vermelho de alarme — só aparece quando há problema de verdade.
-    static let danger = Color(hex: 0xE95760)
+    static let focus = Color(hex: 0x9CA3AF)
+    /// Vermelho de alarme. Mesmo hex do acento de propósito: no print, cota estourada e botão
+    /// primário são o mesmo vermelho — o contexto (barra vs. botão) é que separa os dois.
+    static let danger = Color(hex: 0xEF4444)
     /// O pontinho antes da logo no cabeçalho de cada provedor — puramente decorativo (marca de
     /// lista, não estado), por isso é uma constante própria em vez de reaproveitar `danger`.
-    static let groupDot = Color(hex: 0xC94F81)
+    static let groupDot = Color(hex: 0xEF4444)
 
     /// Semáforo de verdade — verde/âmbar/vermelho — nas janelas de cota (5h, semanal etc.): cada
     /// janela é um limite real que estoura, e a cor É a informação.
-    static let calm = Color(hex: 0x45C879)
-    static let warn = Color(hex: 0xD8AA35)
+    static let calm = Color(hex: 0x22C55E)
+    static let warn = Color(hex: 0xEAB308)
     /// Azul-esverdeado da paleta — reservado para acentos que não sejam nível de uso.
     static let teal = Color(hex: 0x27A99D)
     /// Azul-violeta da paleta — idem (ex.: cabeçalho de um provedor "diferente" como o Kimi).
     static let violet = Color(hex: 0x8C8BE7)
 
-    /// A borda/divisória: linha discreta separando blocos.
-    static let line = Color(hex: 0x28303A)
-    /// Um degrau acima da linha, para hover.
-    static let lineStrong = Color(hex: 0x323C48)
-    /// Trilho das barrinhas de uso — mais escuro que a divisória, para a barra ficar legível sem
-    /// competir com as linhas do painel.
-    static let track = Color(hex: 0x1B2938)
+    /// A borda/divisória e o trilho das barras: a hairline fria do REDLINE (gray-800). No print
+    /// os dois são o MESMO tom — a moldura do card e a trilha da barra pertencem à mesma camada.
+    static let line = Color(hex: 0x1F2937)
+    /// Um degrau acima da linha, para hover e borda de botão fantasma (gray-600).
+    static let lineStrong = Color(hex: 0x4B5563)
+    static let track = Color(hex: 0x1F2937)
+    /// O fundo levemente avermelhado da aba ativa (`#0E0404` no print): o acento aparecendo como
+    /// superfície, não como traço.
+    static let accentWash = Color(hex: 0x0E0404)
 
     // MARK: - Cores em AppKit (NSStatusItem)
 
     enum NS {
-        static let bg = NSColor(hex: 0x101214)
-        static let accent = NSColor(hex: 0xD7DBDF)
-        static let focus = NSColor(hex: 0x9AA3AD)
-        static let danger = NSColor(hex: 0xE95760)
-        static let calm = NSColor(hex: 0x45C879)
-        static let warn = NSColor(hex: 0xD8AA35)
-        static let inkDim = NSColor(hex: 0x92979D)
-        static let inkFaint = NSColor(hex: 0x565C63)
+        static let bg = NSColor(hex: 0x000000)
+        static let accent = NSColor(hex: 0xEF4444)
+        static let focus = NSColor(hex: 0x9CA3AF)
+        static let danger = NSColor(hex: 0xEF4444)
+        static let calm = NSColor(hex: 0x22C55E)
+        static let warn = NSColor(hex: 0xEAB308)
+        static let inkDim = NSColor(hex: 0x9CA3AF)
+        static let inkFaint = NSColor(hex: 0x4B5563)
         /// Trilho da barrinha da barra de menu: mais claro que o trilho do painel, porque na
         /// barra de menu (bem menor) precisa de mais presença para o vazio ficar legível.
-        static let track = NSColor(hex: 0x323944)
+        static let track = NSColor(hex: 0x374151)
     }
 
     // MARK: - Tipografia (§2)
@@ -129,6 +138,8 @@ enum Theme {
         static let panel: CGFloat = 12
         /// Raio de controle (campo, botão).
         static let control: CGFloat = 8
+        /// Raio dos cards da janela de Ajustes — medido em 8 no print.
+        static let card: CGFloat = 8
         /// Recorte da logo da IA e indicadores pequenos.
         static let logo: CGFloat = 4
     }
@@ -138,6 +149,24 @@ enum Theme {
         static let border: CGFloat = 1
         /// ~290px do print de referência, com 12px de margem interna.
         static let panelWidth: CGFloat = 292
+
+        /// Geometria da janela de Ajustes — toda MEDIDA do print de referência (680×656), não
+        /// estimada: a moldura, o intervalo entre cards e as quatro colunas de uma linha de cota.
+        enum Settings {
+            static let width: CGFloat = 680
+            static let height: CGFloat = 656
+            /// Margem da janela até a borda do card (21px no print).
+            static let gutter: CGFloat = 20
+            static let cardPadding: CGFloat = 13
+            static let cardGap: CGFloat = 16
+            /// Barra de 4px de altura, linhas a cada 16px (290 → 306 → 322 no print).
+            static let barHeight: CGFloat = 4
+            static let barRowGap: CGFloat = 3
+            /// Colunas: rótulo 34→114, percentual termina em 596, reset termina em 639.
+            static let barLabelWidth: CGFloat = 81
+            static let barPercentWidth: CGFloat = 54
+            static let barResetWidth: CGFloat = 84
+        }
         static let padding: CGFloat = 12
         /// Lado da logo da IA no painel.
         static let logoSide: CGFloat = 14
