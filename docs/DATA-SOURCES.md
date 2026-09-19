@@ -272,3 +272,23 @@ lugar nenhum de `~/.gemini`, confirmado por busca em toda a árvore)
 ❌ **Grok** — `~/.grok` só tem `settings.json`/`user-settings.json` (configuração, incluindo a
 chave de API), nenhuma sessão, histórico ou log de uso local
 
+
+## ANTIGRAVITY (cota real via `agy`)
+
+O número da cota **nunca é gravado em disco** — nem o CLI nem a IDE salvam; só consultam o
+servidor e mostram na tela. O token OAuth em texto puro (`~/.gemini/antigravity-cli/antigravity-oauth-token`)
+expira e não é renovado ao usar a IDE, e não deve ser lido (credencial).
+
+A fonte da cota é rodar o próprio CLI do usuário:
+
+```bash
+agy --print "/usage" --output-format json
+```
+
+Devolve `command.data.groups[].buckets[]`, cada bucket com `remaining_fraction` (0..1, quanto
+SOBRA), `window` ("weekly") e `reset_time` (ISO). O AI Quota usa **só o grupo "Gemini Models"**
+(o "Claude and GPT models" é ignorado a pedido do usuário) e converte para "usado %" = 100 − sobra.
+Só existe janela **semanal** — não há bucket de sessão/5h nos dados do Antigravity.
+
+`/usage` é comando de cliente: não gasta cota nem dispara turno (`num_turns: 0`). O `agy` fica em
+`~/.local/bin/agy`. Ver `AntigravityUsageReader`.

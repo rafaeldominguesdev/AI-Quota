@@ -15,7 +15,7 @@ public struct ProviderRegistry: Sendable {
         var list: [any QuotaProvider] = [
             ClaudeCodeProvider(),
             CodexProvider(),
-            GeminiProvider(),
+            AntigravityProvider(),
             GrokProvider(),
             CursorProvider()
         ]
