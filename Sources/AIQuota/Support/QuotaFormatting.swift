@@ -116,6 +116,18 @@ enum QuotaFormatting {
         )
     }
 
+    /// Quanto tempo FAZ desde um momento — o "Última leitura: agora" do rodapé da janela de
+    /// Ajustes. Abaixo de meio minuto é "agora": o refresh roda a cada 30s, então contar segundos
+    /// ali só faria o texto piscar sem informar nada.
+    static func elapsed(since date: Date, now: Date) -> String {
+        let seconds = Int(max(0, now.timeIntervalSince(date)))
+        if seconds < 30 { return "agora" }
+        if seconds < 3600 { return "há \(seconds / 60)min" }
+        let hours = seconds / 3600
+        if hours < 24 { return "há \(hours)h" }
+        return "há \(hours / 24)d"
+    }
+
     /// Forma compacta do tempo restante, "2h50m" ou "42s", para as linhas de provedor.
     static func remaining(until date: Date, now: Date) -> String {
         let totalSeconds = Int(max(0, date.timeIntervalSince(now)))

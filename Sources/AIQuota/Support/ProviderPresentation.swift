@@ -157,6 +157,13 @@ struct ProviderPresentation {
         planBadge?.first.map(String.init)
     }
 
+    /// Conectada de verdade = instalada E com conta logada legível OU com alguma janela de cota.
+    /// Grok e Cursor (instalados, sem login/cota) contam como NÃO conectados — vão para a aba de
+    /// conectar, não para a lista principal.
+    var isConnected: Bool {
+        snapshot.isInstalled && (maskedAccountEmail != nil || !windows.isEmpty)
+    }
+
     /// E-mail da conta mascarado ("r•••@g•••.com"), quando o provedor guarda credenciais
     /// legíveis localmente. `nil` para quem não guarda (Grok, Cursor...) — a UI simplesmente não
     /// desenha a linha.

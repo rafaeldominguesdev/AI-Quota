@@ -6,35 +6,41 @@ import AppKit
 struct PopoverRootView: View {
     @ObservedObject var store: QuotaStore
 
-    private enum Screen {
-        case panel
-        case providers
-    }
-
-    @ViewState private var screen: Screen = .panel
-    @ViewState private var isLoginItemEnabled = false
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-
-            switch screen {
-            case .panel:
-                panel
-            case .providers:
-                ProvidersScreenView(store: store, onBack: { go(to: .panel) })
-            }
-
-            if screen == .panel { retrospecto }
-            loginItemRow
+            panel
+            retrospecto
             actions
         }
         .frame(width: Theme.Metric.panelWidth)
         .background(Theme.bg)
+        .background(providerShortcuts)
         .environment(\.colorScheme, .dark)
-        .onAppear {
-            store.refreshNow()
-            isLoginItemEnabled = LoginItemManager.isEnabled
+        .onAppear { store.refreshNow() }
+    }
+
+    /// Os atalhos de uma letra que abrem a página de cada IA no navegador.
+    ///
+    /// São botões de verdade, só invisíveis: `keyboardShortcut` é o mecanismo do SwiftUI, e um
+    /// botão escondido atrás do painel é o jeito de registrar a tecla sem desenhar nada. Ficam
+    /// fora de qualquer `if`, atrelados às IAs que o painel está mostrando, então a tecla vale
+    /// exatamente para o que está na tela.
+    ///
+    /// Sem modificador de propósito: o painel não tem campo de texto, então uma letra solta não
+    /// briga com nada. Depois de abrir o navegador o painel se fecha — deixá-lo aberto atrás do
+    /// browser só atrapalharia.
+    private var providerShortcuts: some View {
+        ForEach(ProviderGrouping.group(store.connectedProviders)) { group in
+            if let entry = ProviderWebConsole.entry(forProviderId: group.id) {
+                Button("") {
+                    ProviderWebConsole.open(providerId: group.id)
+                    AppDelegate.shared?.closePopover()
+                }
+                .keyboardShortcut(KeyEquivalent(entry.key), modifiers: [])
+                .opacity(0)
+                .frame(width: 0, height: 0)
+            }
         }
     }
 
@@ -42,13 +48,18 @@ struct PopoverRootView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("AI Quota")
-                .font(Theme.mono(Theme.Size.label, .bold))
-                .tracking(Theme.tracking(Theme.Em.label, at: Theme.Size.label))
-                .textCase(.uppercase)
-                .foregroundStyle(Theme.inkDim)
-                .lineLimit(1)
-                .fixedSize()
+            AIQuotaMark(side: 13)
+
+            HStack(spacing: 5) {
+                Text("AI")
+                    .foregroundStyle(Theme.inkDim)
+                Text("QUOTA")
+                    .foregroundStyle(Theme.accent)
+            }
+            .font(Theme.mono(Theme.Size.label, .bold))
+            .tracking(Theme.tracking(Theme.Em.label, at: Theme.Size.label))
+            .lineLimit(1)
+            .fixedSize()
 
             Spacer(minLength: 4)
 
@@ -106,58 +117,28 @@ struct PopoverRootView: View {
 
     // MARK: - Rodapé
 
-    /// Título + descrição de uma linha, do jeito de um subtítulo de item de menu do macOS. Abre
-    /// um relatório HTML gerado na hora a partir dos logs locais (ver `Retrospecto.open()`) —
-    /// nada de servidor, nada saindo desta máquina.
+    /// Abre um relatório HTML gerado na hora a partir dos logs locais (ver `Retrospecto.open()`)
+    /// — nada de servidor, nada saindo desta máquina. Só o título: a descrição de uma linha que
+    /// ficava embaixo saiu a pedido do usuário.
     private var retrospecto: some View {
         Button(action: Retrospecto.open) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Retrospecto")
-                    .font(Theme.mono(Theme.Size.small, .bold))
-                    .foregroundStyle(Theme.ink)
-
-                Text("Abre no navegador o histórico de consumo das contas")
-                    .font(Theme.mono(Theme.Size.micro))
-                    .foregroundStyle(Theme.inkMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text("Retrospecto")
+                .font(Theme.mono(Theme.Size.small, .bold))
+                .foregroundStyle(Theme.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
         .padding(.horizontal, Theme.Metric.padding)
         .padding(.top, 14)
-    }
-
-    /// Checkbox de verdade: só marca quando `SMAppService` confirma o registro, nunca de forma
-    /// otimista (ver `LoginItemManager`).
-    private var loginItemRow: some View {
-        Button(action: toggleLoginItem) {
-            HStack(spacing: 6) {
-                Text(isLoginItemEnabled ? "✓" : "·")
-                    .font(Theme.mono(Theme.Size.small, .bold))
-                    .foregroundStyle(isLoginItemEnabled ? Theme.ink : Theme.inkFaint)
-                    .frame(width: 10, alignment: .center)
-
-                Text("Iniciar no login")
-                    .font(Theme.mono(Theme.Size.micro))
-                    .foregroundStyle(Theme.inkMuted)
-
-                Spacer(minLength: 0)
-            }
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, Theme.Metric.padding)
-        .padding(.top, 14)
-        .padding(.bottom, 8)
     }
 
     /// Lista vertical, uma ação por linha — do jeito do print de referência, não mais um trio
     /// inline separado por "·".
     private var actions: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextAction(title: screen == .providers ? "Painel" : "Ajustes") {
-                go(to: screen == .providers ? .panel : .providers)
-            }
+            // Abre a janela de Ajustes (680pt), fora do popover: configurar não cabe em 292pt
+            // de largura numa superfície que fecha ao perder o foco.
+            TextAction(title: "Ajustes") { SettingsWindowController.shared.show(store: store) }
             // Força uma checagem imediata — o auto-refresh de 30s já cobre o caso comum, isto é
             // só pra quem quer confirmar na hora (ex.: acabou de rodar o CLI de novo).
             TextAction(title: "Atualizar leituras") { store.refreshNow() }
@@ -166,16 +147,5 @@ struct PopoverRootView: View {
         .padding(.horizontal, Theme.Metric.padding)
         .padding(.top, 12)
         .padding(.bottom, 14)
-    }
-
-    private func go(to destination: Screen) {
-        withAnimation(Theme.Motion.screen) { screen = destination }
-    }
-
-    private func toggleLoginItem() {
-        let target = !isLoginItemEnabled
-        if LoginItemManager.setEnabled(target) {
-            isLoginItemEnabled = target
-        }
     }
 }

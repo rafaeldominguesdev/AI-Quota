@@ -106,13 +106,16 @@ final class QuotaStore: ObservableObject {
             }
     }
 
-    /// Provedores conectados de verdade — instalados E com pelo menos uma janela de cota
-    /// (limite oficial ou custo estimado). `isInstalled` sozinho não basta: o CLI pode estar no
-    /// disco sem nenhum plano configurado, e aí não há percentual nenhum para desenhar. Na
-    /// mesma ordem de `providerRows`; é o que a barra de menu mostra, uma logo + barrinha por IA
-    /// que o usuário realmente usa, não a lista inteira de provedores suportados.
+    /// Provedores conectados de verdade — instalados E com algo real para mostrar: uma janela de
+    /// cota (limite oficial ou custo estimado) OU, para quem não expõe cota, ao menos uma
+    /// contagem de uso (`fallbackValue`, o "N usos" do Cursor e do Antigravity). `isInstalled`
+    /// sozinho não basta: o CLI pode estar no disco sem nenhum uso, e aí não há o que desenhar.
+    /// Na mesma ordem de `providerRows`; é o que a barra de menu mostra, as IAs que o usuário
+    /// realmente usa, não a lista inteira de provedores suportados.
     var connectedProviders: [ProviderPresentation] {
-        providerRows.filter { $0.snapshot.isInstalled && !$0.windows.isEmpty }
+        providerRows.filter {
+            $0.snapshot.isInstalled && (!$0.windows.isEmpty || $0.fallbackValue != nil)
+        }
     }
 
     private static func rank(_ presentation: ProviderPresentation) -> Int {
