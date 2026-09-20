@@ -199,9 +199,16 @@ struct SettingsTabContent: View {
         let pending = store.sources.filter { !(presentations[$0.id]?.isConnected ?? false) }
 
         return VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: "Disponíveis para conectar") {
+            // Primeiro o que a pessoa CONECTA (chave de API), depois o que o app DETECTA
+            // (CLI no disco). A detecção falha por motivos que não estão na mão de ninguém —
+            // pasta movida, HOME diferente, log ainda não escrito —, então ela não pode ser
+            // a única porta de entrada nem a primeira coisa da aba.
+            APIConnectView(store: store)
+
+            SectionHeader(title: "CLIs detectadas no disco") {
                 GhostButton(title: "Detectar") { store.refreshNow() }
             }
+            .padding(.top, 20)
 
             if store.sources.isEmpty {
                 EmptyLine(text: "Varrendo o disco…")
