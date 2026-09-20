@@ -24,7 +24,10 @@ struct APIConnectView: View {
 
             VStack(spacing: Theme.Metric.Settings.cardGap) {
                 ForEach(APIProviderCatalog.all) { def in
-                    SettingsCard {
+                    SettingsCard(
+                        borderColor: conectado(def) ? Theme.calm : Theme.line,
+                        borderWidth: conectado(def) ? 1.5 : Theme.Metric.border
+                    ) {
                         VStack(alignment: .leading, spacing: 10) {
                             cabecalho(def)
                             contasDe(def)
@@ -41,6 +44,15 @@ struct APIConnectView: View {
 
     private func cabecalho(_ def: APIProviderDef) -> some View {
         HStack(spacing: 10) {
+            // A logo vem antes do nome de propósito: quem abre esta aba está procurando
+            // "aquele roxo do Kimi", não lendo uma lista de nomes. Marca reconhece mais rápido
+            // que texto, e vários desses provedores têm nome que não se guarda de primeira.
+            ProviderLogoView(
+                providerId: def.id,
+                glyphColor: conectado(def) ? Theme.inkDim : Theme.inkFaint,
+                side: 22
+            )
+
             VStack(alignment: .leading, spacing: 3) {
                 Text(def.displayName)
                     .font(Theme.mono(Theme.Size.small, .medium))
@@ -74,6 +86,10 @@ struct APIConnectView: View {
         case .deepSeekBalance, .moonshotBalance: return "reporta saldo restante"
         case .validateOnly: return "sem endpoint de cota — só valida a chave"
         }
+    }
+
+    private func conectado(_ def: APIProviderDef) -> Bool {
+        accounts.contains { $0.providerId == def.id }
     }
 
     private func contasDe(_ def: APIProviderDef) -> some View {
