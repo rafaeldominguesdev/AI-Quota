@@ -24,8 +24,15 @@ enum ProviderLogo {
         "codex": "codex.svg",
         "grok": "grok.png",
         "cursor": "cursor.png",
+        // Provedores por CHAVE (ver `APIProviderCatalog`). O id deles é composto —
+        // "openrouter:<id da conta>" —, e quem resolve isso é o `hasPrefix` abaixo.
+        "openrouter": "openrouter.png",
+        "moonshot": "moonshot.png",
+        "fireworks": "fireworks.png",
+        // o arquivo leva o nome da marca (Z.ai / Zhipu); a chave é o id do catálogo.
+        "zai": "glm.png",
+        "deepseek": "deepseek.png",
         // Disponíveis para quem adicionar esses provedores pelo providers.json.
-        "deepseek": "deepseek.jpg",
         "meta": "meta.png",
         "antigravity": "antigravity.png"
     ]
