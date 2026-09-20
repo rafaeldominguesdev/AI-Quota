@@ -21,6 +21,7 @@ public struct ProviderRegistry: Sendable {
         ]
         list.append(contentsOf: parsed.customProviders.map(CustomLogProvider.init(config:)))
         list.append(contentsOf: Self.discoveredAccountProviders())
+        list.append(contentsOf: Self.apiAccountProviders())
 
         self.providers = list
         self.primaryProviderId = parsed.primaryProviderId ?? "claude-code"
@@ -48,6 +49,16 @@ public struct ProviderRegistry: Sendable {
                     id: id,
                     displayName: "Claude Code (\(account.label.capitalized))"
                 )
+            }
+        }
+    }
+
+    /// Um provedor por CONTA conectada por chave (OpenRouter, DeepSeek…). Duas chaves do mesmo
+    /// provedor viram duas linhas: são cotas diferentes, e somá-las esconderia qual acabou.
+    private static func apiAccountProviders() -> [any QuotaProvider] {
+        APIAccountStore.load().compactMap { account in
+            APIProviderCatalog.find(account.providerId).map {
+                APIQuotaProvider(def: $0, account: account)
             }
         }
     }
