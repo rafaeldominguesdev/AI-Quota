@@ -200,9 +200,20 @@ struct AccountCard: View {
                 }
 
                 if presentation.windows.isEmpty {
-                    Text(presentation.note ?? "Sem janela de cota reportada")
-                        .font(Theme.mono(Theme.Size.micro))
-                        .foregroundStyle(Theme.inkFaint)
+                    // Sem % local pra desenhar barra (Cursor: nada publica esse número por CLI
+                    // nem API) — quando existe página de conta conhecida, o link poupa a pessoa
+                    // de sair procurando onde fica o painel de uso do provedor.
+                    HStack(spacing: 8) {
+                        Text(presentation.note ?? "Sem janela de cota reportada")
+                            .font(Theme.mono(Theme.Size.micro))
+                            .foregroundStyle(Theme.inkFaint)
+                        Spacer(minLength: 8)
+                        if ProviderWebConsole.entry(forProviderId: presentation.id) != nil {
+                            GhostButton(title: "Ver no site") {
+                                ProviderWebConsole.open(providerId: presentation.id)
+                            }
+                        }
+                    }
                 } else {
                     VStack(spacing: Theme.Metric.Settings.barRowGap) {
                         ForEach(presentation.windows) { window in
