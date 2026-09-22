@@ -20,7 +20,9 @@ enum ProviderWebConsole {
     private static let entries: [String: Entry] = [
         "claude-code": Entry(key: "c", url: URL(string: "https://claude.ai/settings/usage")!),
         "codex": Entry(key: "x", url: URL(string: "https://chatgpt.com/#settings")!),
-        "antigravity": Entry(key: "a", url: URL(string: "https://antigravity.google")!),
+        // Sem página de conta na web: cota só existe dentro da própria CLI (`/usage`).
+        // Manda pra doc que explica isso, em vez da home de marketing.
+        "antigravity": Entry(key: "a", url: URL(string: "https://antigravity.google/docs/cli/commands/usage/")!),
         "cursor": Entry(key: "u", url: URL(string: "https://cursor.com/dashboard")!),
         "grok": Entry(key: "k", url: URL(string: "https://grok.com")!)
     ]

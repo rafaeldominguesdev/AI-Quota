@@ -318,6 +318,19 @@ struct ProviderCard: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+
+                Spacer(minLength: 8)
+
+                // A CLI faz login sozinha (OAuth próprio) — o app não tem chave pra pedir.
+                // O botão só leva até a página de conta; depois de logar na CLI, a próxima
+                // leitura já detecta sozinha. Exceção: o Grok CLI não grava uso local (ver
+                // GrokProvider) — "Conectar" prometeria uma barra que nunca vai aparecer, então
+                // o rótulo aqui só oferece abrir o site, sem sugerir que algo vai mudar no app.
+                if ProviderWebConsole.entry(forProviderId: source.id) != nil {
+                    GhostButton(title: source.id == "grok" ? "Abrir site" : "Conectar") {
+                        ProviderWebConsole.open(providerId: source.id)
+                    }
+                }
             }
         }
     }
