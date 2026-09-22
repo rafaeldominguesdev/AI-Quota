@@ -4,14 +4,15 @@ import AppKit
 /// autentica a CLI (são sessões separadas). "Conectar" precisa rodar o comando de login da
 /// própria CLI, que é o que grava a credencial que o app depois lê do disco.
 ///
-/// Cursor fica de fora de propósito: `cursor-agent login` autentica a CLI, mas o que este app lê
-/// (`ai-code-tracking.db`) é um registro de código gerado no EDITOR, sem nenhuma ligação com essa
-/// sessão — logar não muda nada aqui. Pra Cursor, a página web (com o % de verdade da conta) é a
-/// única fonte que faz sentido, então ele cai no fallback de `ProviderWebConsole`.
+/// Cursor entrou na lista depois de `CursorAccountReader` existir: `cursor-agent login` não
+/// alimenta o banco de uso do editor (isso continua sem relação nenhuma), mas agora
+/// `cursor-agent about --format json` lê e-mail + plano da mesma sessão — o suficiente pra
+/// aparecer como "CONECTADO" de verdade depois do login, mesmo sem barra de consumo.
 enum ProviderLoginCommand {
     private static let commands: [String: String] = [
         "claude-code": "claude auth login",
         "codex": "codex login",
+        "cursor": "cursor-agent login",
         // Sem subcomando de login: `agy` dispara o fluxo de autenticação sozinho na primeira
         // vez que abre, e não faz nada de mal se já estiver logado.
         "antigravity": "agy"
@@ -35,7 +36,8 @@ enum ProviderLoginCommand {
     static func openInTerminal(providerId: String) {
         guard let command = command(forProviderId: providerId) else { return }
         let displayName = providerId.hasPrefix("claude") ? "Claude Code"
-            : providerId.hasPrefix("codex") ? "Codex" : "Antigravity"
+            : providerId.hasPrefix("codex") ? "Codex"
+            : providerId == "cursor" ? "Cursor" : "Antigravity"
 
         let script = """
         #!/bin/zsh

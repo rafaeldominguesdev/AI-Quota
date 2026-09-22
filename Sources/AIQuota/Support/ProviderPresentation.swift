@@ -158,8 +158,9 @@ struct ProviderPresentation {
     }
 
     /// Conectada de verdade = instalada E com conta logada legível OU com alguma janela de cota.
-    /// Grok e Cursor (instalados, sem login/cota) contam como NÃO conectados — vão para a aba de
-    /// conectar, não para a lista principal.
+    /// Grok (instalado, sem login nem cota legível por nenhum meio) conta como NÃO conectado —
+    /// vai para a aba de conectar, não para a lista principal. Cursor tem conta legível
+    /// (`CursorAccountReader`) mesmo sem cota, então entra como conectado assim que loga.
     var isConnected: Bool {
         snapshot.isInstalled && (maskedAccountEmail != nil || !windows.isEmpty)
     }

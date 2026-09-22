@@ -9,9 +9,11 @@ public struct CursorProvider: QuotaProvider {
     public let kind: ProviderDataKind = .countOnly
 
     private let reader: CursorUsageReader
+    private let accountReader: CursorAccountReader
 
-    public init(reader: CursorUsageReader = CursorUsageReader()) {
+    public init(reader: CursorUsageReader = CursorUsageReader(), accountReader: CursorAccountReader = CursorAccountReader()) {
         self.reader = reader
+        self.accountReader = accountReader
     }
 
     public var sourcePath: String { reader.databasePath }
@@ -21,10 +23,15 @@ public struct CursorProvider: QuotaProvider {
     }
 
     public func snapshot(config: QuotaConfig) throws -> ProviderSnapshot {
+        // A identidade vem do próprio `cursor-agent` (login de CLI), não do banco de uso do
+        // editor — as duas coisas são independentes. Sem isso, logar pela CLI nunca mudava nada
+        // aqui, mesmo com a sessão válida.
+        let account = accountReader.read()
+
         guard isInstalled else {
             return .unavailable(
                 providerId: id, displayName: displayName, isInstalled: false,
-                note: "Banco \(sourcePath) não encontrado"
+                note: "Banco \(sourcePath) não encontrado", planLabel: account?.planLabel, accountEmail: account?.email
             )
         }
 
@@ -32,7 +39,10 @@ public struct CursorProvider: QuotaProvider {
         guard let last = UsageWindowBuilder.windows(for: records).last else {
             return .unavailable(
                 providerId: id, displayName: displayName, kind: .countOnly, isInstalled: true,
-                note: "Nenhum uso registrado em \(sourcePath)"
+                note: account != nil
+                    ? "Logado, mas sem uso registrado em \(sourcePath) — o Cursor só grava ao gerar código no editor."
+                    : "Nenhum uso registrado em \(sourcePath)",
+                planLabel: account?.planLabel, accountEmail: account?.email
             )
         }
 
@@ -57,7 +67,9 @@ public struct CursorProvider: QuotaProvider {
             eventCount: last.events.count,
             byModel: byModel,
             note: "Sem dado de token: o Cursor só registra quantas vezes cada modelo foi usado.",
-            hourlyUsage: hourlyUsage
+            hourlyUsage: hourlyUsage,
+            planLabel: account?.planLabel,
+            accountEmail: account?.email
         )
     }
 }

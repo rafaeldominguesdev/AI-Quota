@@ -65,7 +65,7 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
     public let planLabel: String?
 
     /// E-mail da conta logada localmente, sem máscara — quem mascara é a UI, nunca o dado bruto.
-    /// `nil` para provedores que não guardam credenciais legíveis localmente (Grok, Cursor...).
+    /// `nil` para quem não expõe identidade nenhuma localmente ou por CLI (Grok).
     public let accountEmail: String?
 
     /// Human-readable explanation for edge cases: not installed, no data, config errors, etc.
@@ -114,7 +114,9 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
         displayName: String,
         kind: ProviderDataKind = .unavailable,
         isInstalled: Bool,
-        note: String
+        note: String,
+        planLabel: String? = nil,
+        accountEmail: String? = nil
     ) -> ProviderSnapshot {
         ProviderSnapshot(
             providerId: providerId,
@@ -129,7 +131,9 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
             eventCount: 0,
             byModel: [],
             note: note,
-            hourlyUsage: []
+            hourlyUsage: [],
+            planLabel: planLabel,
+            accountEmail: accountEmail
         )
     }
 }
