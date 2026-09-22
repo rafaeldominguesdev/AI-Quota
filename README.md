@@ -14,21 +14,9 @@ Suporta **Claude Code, Codex, Antigravity, Cursor, Grok** e qualquer CLI customi
 
 Clicar no ícone da barra de menu abre um painel com uma seção por IA: logo, e-mail mascarado, uma barra por janela de cota (5h, semanal) e uma tecla que abre a página da IA no navegador.
 
-```
-AI QUOTA                                          2h56m
-
-  CLAUDE CODE                                       [C]
-  r•••@g•••.com
-  5H       [██████░░░░░░░░]  71%             em 2h56m
-  SEMANAL  [██████░░░░░░░░]  66%             em 4d17h
-
-  CODEX (GPT)                                       [X]
-  r•••@g•••.com
-  5H       [░░░░░░░░░░░░░░]   0%
-  SEMANAL  [██████████░░░░]  75%             em 1d11h
-
-  US$ 26,62 · 43,6 M tokens
-```
+<p align="center">
+  <img src="docs/images/painel.png" alt="Painel do AI Quota mostrando cota de Claude Code, Antigravity, Codex e OpenRouter" width="360">
+</p>
 
 - A cor da barra segue o nível de uso: verde, âmbar, vermelho.
 - **Retrospecto** gera um relatório local (tokens e custo por dia) e abre no navegador.
