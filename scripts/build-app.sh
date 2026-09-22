@@ -79,8 +79,6 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>O botão Conectar abre o Terminal já rodando o comando de login da CLI escolhida.</string>
 </dict>
 </plist>
 PLIST
