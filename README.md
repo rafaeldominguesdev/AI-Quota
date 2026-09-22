@@ -4,11 +4,9 @@ App de barra de menu do macOS que mostra, por IA, quanto da cota atual já foi u
 
 Suporta **Claude Code, Codex, Antigravity, Cursor, Grok** e qualquer CLI customizado.
 
-<p>
-  <a href="https://github.com/rafaeldominguesdev/AI-Quota/releases/latest/download/AI-Quota.dmg">
-    <img alt="Baixar para macOS" src="https://img.shields.io/badge/Baixar-macOS%20(Apple%20Silicon)-black?style=for-the-badge&logo=apple">
-  </a>
-</p>
+| Arquivo | Sistema | |
+|---|---|---|
+| `AI-Quota.dmg` | macOS · Apple Silicon (M1 ou mais novo) | [**Baixar**](https://github.com/rafaeldominguesdev/AI-Quota/releases/latest/download/AI-Quota.dmg) |
 
 ## O painel
 
