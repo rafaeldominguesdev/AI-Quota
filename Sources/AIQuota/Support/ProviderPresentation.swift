@@ -180,7 +180,11 @@ struct ProviderPresentation {
             guard snapshot.totalTokens > 0 else { return nil }
             return QuotaFormatting.compactTokens(snapshot.totalTokens) + " tok"
         case .countOnly:
-            guard snapshot.eventCount > 0 else { return nil }
+            // "0 usos" é uma contagem real (o banco tem zero linhas), diferente de inventar uma
+            // barra — só aparece quando existe conta legível, senão um provedor nunca aberto
+            // ganharia uma linha do nada. Sem isso, uma conta recém-conectada (Cursor logo após
+            // o login, sem nenhum código gerado ainda) ficava invisível no painel principal.
+            guard snapshot.eventCount > 0 || snapshot.accountEmail != nil else { return nil }
             return "\(snapshot.eventCount) uso" + (snapshot.eventCount == 1 ? "" : "s")
         case .unavailable:
             return nil
