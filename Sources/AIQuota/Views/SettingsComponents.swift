@@ -321,13 +321,18 @@ struct ProviderCard: View {
 
                 Spacer(minLength: 8)
 
-                // A CLI faz login sozinha (OAuth próprio) — o app não tem chave pra pedir.
-                // O botão só leva até a página de conta; depois de logar na CLI, a próxima
-                // leitura já detecta sozinha. Exceção: o Grok CLI não grava uso local (ver
-                // GrokProvider) — "Conectar" prometeria uma barra que nunca vai aparecer, então
-                // o rótulo aqui só oferece abrir o site, sem sugerir que algo vai mudar no app.
-                if ProviderWebConsole.entry(forProviderId: source.id) != nil {
-                    GhostButton(title: source.id == "grok" ? "Abrir site" : "Conectar") {
+                // Abrir a página de conta no navegador NÃO loga a CLI — são sessões separadas.
+                // "Conectar" precisa rodar o comando de login da própria CLI (Terminal), que é
+                // o que grava a credencial que este app lê do disco. Exceção: o Grok CLI não
+                // grava uso local nenhum (ver GrokProvider) — nem logando ele vai aparecer com
+                // dado aqui, então o botão dele só oferece o site, sem prometer conexão.
+                if let command = ProviderLoginCommand.command(forProviderId: source.id) {
+                    GhostButton(title: "Conectar") {
+                        ProviderLoginCommand.openInTerminal(providerId: source.id)
+                    }
+                    .help("Abre o Terminal rodando: \(command)")
+                } else if ProviderWebConsole.entry(forProviderId: source.id) != nil {
+                    GhostButton(title: "Abrir site") {
                         ProviderWebConsole.open(providerId: source.id)
                     }
                 }
