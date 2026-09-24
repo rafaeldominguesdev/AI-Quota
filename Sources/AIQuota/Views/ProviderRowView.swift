@@ -14,6 +14,11 @@ struct ProviderRowView: View {
     /// `false` quando um `ProviderGroupHeaderView` já desenhou a logo + o nome acima — o caso de
     /// uma segunda (terceira...) conta do mesmo provedor, que não repete cabeçalho.
     var showHeader: Bool = true
+    /// Só o Cursor usa: dispara o login+raspagem da cota web. `nil` em qualquer outro provedor.
+    var onCheckCursorQuota: (() -> Void)?
+    /// Espelha `QuotaStore.isCheckingCursorQuota` — vive lá porque a checagem sobrevive a este
+    /// row ser recriado (o painel reconstrói a lista a cada refresh).
+    var isCheckingCursorQuota: Bool = false
 
     private var windows: [QuotaWindowPresentation] { presentation.windows }
     private var isDim: Bool { windows.isEmpty && presentation.fallbackValue == nil }
@@ -128,6 +133,20 @@ struct ProviderRowView: View {
                 .truncationMode(.tail)
 
             Spacer(minLength: 0)
+
+            // Só o Cursor: nenhuma API publica esse %, então a única forma de ter a barra é
+            // raspar o dashboard depois de logar numa sessão própria deste app. Discreto de
+            // propósito — é ação de bootstrap (uma vez só), não algo que a pessoa vai clicar toda
+            // hora igual "Atualizar leituras" no rodapé.
+            if let onCheckCursorQuota {
+                Button(action: onCheckCursorQuota) {
+                    Text(isCheckingCursorQuota ? "verificando…" : "atualizar")
+                        .font(Theme.mono(Theme.Size.micro))
+                        .foregroundStyle(Theme.inkMuted)
+                }
+                .buttonStyle(.plain)
+                .disabled(isCheckingCursorQuota)
+            }
         }
         .frame(height: Theme.Metric.windowRowHeight)
         .padding(.leading, Theme.Metric.windowIndent)

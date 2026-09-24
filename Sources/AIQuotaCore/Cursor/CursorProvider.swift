@@ -28,20 +28,42 @@ public struct CursorProvider: QuotaProvider {
         // aqui, mesmo com a sessão válida.
         let account = accountReader.read()
 
+        // Raspado da web pelo `CursorWebSession` (target do app, WebKit) — nenhuma API do Cursor
+        // publica esse número, então é o único jeito honesto de ter uma barra de %. Some sozinho
+        // depois de `CursorWebUsageCache.maxAge` sem leitura nova, em vez de mostrar algo velho
+        // como se fosse de agora.
+        let webUsage = CursorWebUsageCache.load()
+        let officialLimits: [OfficialLimitInfo] = webUsage.map {
+            [OfficialLimitInfo(label: "Cota (site)", usedPercent: $0.percentUsed, resetsAt: nil)]
+        } ?? []
+
+        let records = reader.readUsageRecords()
+
+        // Sem a % real do site ainda (nunca logou, ou a sessão expirou) — dá pra ter uma noção
+        // aproximada sem depender de login nenhum: conta quantos usos aconteceram desde o início
+        // do mês corrente e compara com `cursorMonthlyEventCeiling`. Some sozinho assim que a
+        // leitura real da web existir, para não mostrar dois números conflitantes.
+        let estimatedLimits: [OfficialLimitInfo] = webUsage == nil
+            ? Self.monthlyEstimate(records: records, config: config)
+            : []
+
         guard isInstalled else {
             return .unavailable(
                 providerId: id, displayName: displayName, isInstalled: false,
-                note: "Banco \(sourcePath) não encontrado", planLabel: account?.planLabel, accountEmail: account?.email
+                note: "Banco \(sourcePath) não encontrado", officialLimits: officialLimits,
+                estimatedLimits: estimatedLimits,
+                planLabel: account?.planLabel, accountEmail: account?.email
             )
         }
 
-        let records = reader.readUsageRecords()
         guard let last = UsageWindowBuilder.windows(for: records).last else {
             return .unavailable(
                 providerId: id, displayName: displayName, kind: .countOnly, isInstalled: true,
                 note: account != nil
                     ? "Logado, mas sem uso registrado em \(sourcePath) — o Cursor só grava ao gerar código no editor."
                     : "Nenhum uso registrado em \(sourcePath)",
+                officialLimits: officialLimits,
+                estimatedLimits: estimatedLimits,
                 planLabel: account?.planLabel, accountEmail: account?.email
             )
         }
@@ -66,10 +88,28 @@ public struct CursorProvider: QuotaProvider {
             totalCost: nil,
             eventCount: last.events.count,
             byModel: byModel,
+            officialLimits: officialLimits,
+            estimatedLimits: estimatedLimits,
             note: "Sem dado de token: o Cursor só registra quantas vezes cada modelo foi usado.",
             hourlyUsage: hourlyUsage,
             planLabel: account?.planLabel,
             accountEmail: account?.email
         )
+    }
+
+    /// Usos desde a meia-noite do dia 1 do mês corrente contra `cursorMonthlyEventCeiling`. Uma
+    /// aproximação deliberadamente simples (mês civil, não ciclo real de cobrança, que o Cursor
+    /// não expõe em lugar nenhum local) — melhor que nada enquanto a % real da web não existe.
+    static func monthlyEstimate(
+        records: [CursorUsageRecord], config: QuotaConfig, now: Date = Date(), calendar: Calendar = .current
+    ) -> [OfficialLimitInfo] {
+        guard let monthStart = calendar.dateInterval(of: .month, for: now)?.start,
+              let nextMonthStart = calendar.date(byAdding: .month, value: 1, to: monthStart) else {
+            return []
+        }
+        let count = records.filter { $0.timestamp >= monthStart }.count
+        guard config.cursorMonthlyEventCeiling > 0 else { return [] }
+        let percent = Double(count) / config.cursorMonthlyEventCeiling * 100
+        return [OfficialLimitInfo(label: "Mês (estim.)", usedPercent: percent, resetsAt: nextMonthStart)]
     }
 }

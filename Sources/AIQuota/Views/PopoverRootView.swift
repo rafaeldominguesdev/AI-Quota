@@ -96,7 +96,12 @@ struct PopoverRootView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ProviderGroupHeaderView(group: group)
                         ForEach(group.accounts, id: \.id) { account in
-                            ProviderRowView(presentation: account, showHeader: false)
+                            ProviderRowView(
+                                presentation: account,
+                                showHeader: false,
+                                onCheckCursorQuota: account.id == "cursor" ? { store.checkCursorQuota() } : nil,
+                                isCheckingCursorQuota: store.isCheckingCursorQuota
+                            )
                         }
                     }
                     .padding(.horizontal, Theme.Metric.padding)

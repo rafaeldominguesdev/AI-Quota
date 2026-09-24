@@ -161,6 +161,7 @@ struct EmptyLine: View {
 struct AccountCard: View {
     let presentation: ProviderPresentation
     let family: String
+    @ObservedObject var store: QuotaStore
 
     /// Conectado = tem conta logada legível. É o que acende o outline verde e a logo colorida.
     private var isConnected: Bool { presentation.maskedAccountEmail != nil }
@@ -208,7 +209,12 @@ struct AccountCard: View {
                             .font(Theme.mono(Theme.Size.micro))
                             .foregroundStyle(Theme.inkFaint)
                         Spacer(minLength: 8)
-                        if ProviderWebConsole.entry(forProviderId: presentation.id) != nil {
+                        if presentation.id == "cursor" {
+                            GhostButton(title: store.isCheckingCursorQuota ? "Verificando…" : "Atualizar cota") {
+                                store.checkCursorQuota()
+                            }
+                            .disabled(store.isCheckingCursorQuota)
+                        } else if ProviderWebConsole.entry(forProviderId: presentation.id) != nil {
                             GhostButton(title: "Ver no site") {
                                 ProviderWebConsole.open(providerId: presentation.id)
                             }

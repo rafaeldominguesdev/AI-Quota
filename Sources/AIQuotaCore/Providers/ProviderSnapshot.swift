@@ -60,6 +60,12 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
     /// (usada como o percentual único da barra de menu e do cabeçalho).
     public let officialLimits: [OfficialLimitInfo]
 
+    /// Janelas estimadas pelo próprio provider (não pela UI genérica por custo) — hoje só o
+    /// Cursor usa isto, contando usos no mês corrente contra `QuotaConfig.cursorMonthlyEventCeiling`
+    /// quando não há a % real raspada da web ainda. Sempre tratado como NÃO oficial pela UI,
+    /// mesmo tendo o mesmo formato de `officialLimits`.
+    public let estimatedLimits: [OfficialLimitInfo]
+
     /// Rótulo curto do plano do provedor (ex.: "plus", "pro"), quando ele reporta um. `nil` para
     /// provedores que não expõem essa informação localmente.
     public let planLabel: String?
@@ -84,6 +90,7 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
         eventCount: Int,
         byModel: [ProviderModelUsage],
         officialLimits: [OfficialLimitInfo] = [],
+        estimatedLimits: [OfficialLimitInfo] = [],
         note: String?,
         hourlyUsage: [Int] = [],
         planLabel: String? = nil,
@@ -102,6 +109,7 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
         self.eventCount = eventCount
         self.byModel = byModel
         self.officialLimits = officialLimits
+        self.estimatedLimits = estimatedLimits
         self.note = note
         self.hourlyUsage = hourlyUsage
         self.planLabel = planLabel
@@ -115,6 +123,8 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
         kind: ProviderDataKind = .unavailable,
         isInstalled: Bool,
         note: String,
+        officialLimits: [OfficialLimitInfo] = [],
+        estimatedLimits: [OfficialLimitInfo] = [],
         planLabel: String? = nil,
         accountEmail: String? = nil
     ) -> ProviderSnapshot {
@@ -130,6 +140,8 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
             totalCost: nil,
             eventCount: 0,
             byModel: [],
+            officialLimits: officialLimits,
+            estimatedLimits: estimatedLimits,
             note: note,
             hourlyUsage: [],
             planLabel: planLabel,

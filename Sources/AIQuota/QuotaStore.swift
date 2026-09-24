@@ -24,6 +24,7 @@ final class QuotaStore: ObservableObject {
     @Published private(set) var sources: [ProviderSource] = []
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var isRefreshing = false
+    @Published private(set) var isCheckingCursorQuota = false
 
     /// Chamado na main thread a cada novo overview, para o NSStatusItem redesenhar o medidor
     /// sem precisar assinar o publisher do Combine.
@@ -73,6 +74,43 @@ final class QuotaStore: ObservableObject {
                 )
             }
             await self?.apply(overview: overview, sources: sources)
+        }
+    }
+
+    /// Loga (se preciso) e raspa a cota web do Cursor — ver `CursorWebSession`. Único caminho
+    /// deste app que depende de UI (WebKit), por isso mora aqui e não em `AIQuotaCore`; tanto o
+    /// popover quanto os Ajustes chamam este mesmo método, para não duplicar a lógica.
+    ///
+    /// Tenta ler DIRETO primeiro, sem checar cookie: `cursor.com` seta cookie de analytics mesmo
+    /// sem login, então "existe um cookie" nunca foi prova de sessão válida — só tentar de
+    /// verdade prova algo. Só abre a janela de login quando a tentativa direta falha (redirecionou
+    /// pra tela de login, ou expirou), e tenta de novo uma vez depois que ela fecha.
+    func checkCursorQuota() {
+        guard !isCheckingCursorQuota else { return }
+        isCheckingCursorQuota = true
+        CursorWebSession.shared.fetchUsagePercent { [weak self] percent in
+            Task { @MainActor in
+                if let percent {
+                    self?.isCheckingCursorQuota = false
+                    CursorWebUsageCache.save(CursorWebUsageCache(percentUsed: percent, capturedAt: Date()))
+                    self?.refreshNow()
+                    return
+                }
+                CursorWebSession.shared.presentLogin {
+                    Task { @MainActor in self?.retryCursorUsageAfterLogin() }
+                }
+            }
+        }
+    }
+
+    private func retryCursorUsageAfterLogin() {
+        CursorWebSession.shared.fetchUsagePercent { [weak self] percent in
+            Task { @MainActor in
+                self?.isCheckingCursorQuota = false
+                guard let percent else { return }
+                CursorWebUsageCache.save(CursorWebUsageCache(percentUsed: percent, capturedAt: Date()))
+                self?.refreshNow()
+            }
         }
     }
 

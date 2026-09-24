@@ -167,7 +167,7 @@ struct SettingsTabContent: View {
                 VStack(spacing: Theme.Metric.Settings.cardGap) {
                     ForEach(ProviderGrouping.group(connected)) { group in
                         ForEach(group.accounts, id: \.id) { account in
-                            AccountCard(presentation: account, family: group.displayName)
+                            AccountCard(presentation: account, family: group.displayName, store: store)
                         }
                     }
                 }

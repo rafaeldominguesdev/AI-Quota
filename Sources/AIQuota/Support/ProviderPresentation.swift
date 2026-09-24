@@ -93,6 +93,16 @@ struct ProviderPresentation {
             )
         }
 
+        result += snapshot.estimatedLimits.map { info in
+            QuotaWindowPresentation(
+                label: info.label,
+                percent: min(100, max(0, info.usedPercent)),
+                isOfficial: false,
+                resetsAt: info.resetsAt,
+                config: config
+            )
+        }
+
         let hasSessionWindow = result.contains { Self.isSessionLabel($0.label) }
         if !hasSessionWindow, let cost = snapshot.totalCost, cost > 0 {
             result.insert(
